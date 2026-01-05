@@ -100,7 +100,7 @@ Archive/
 │   ├── MainWindow.xaml    # Main interface
 │   ├── Services/          # Background services
 │   └── Windows/           # Dialog windows
-├── Archive.Pages/         # GitHub Pages documentation site
+├── docs/                  # GitHub Pages documentation site
 └── .github/workflows/     # CI/CD automation
 ```
 
