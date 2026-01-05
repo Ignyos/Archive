@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Console Documentation - Archive</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <div class="nav-brand">
+                <h1><a href="index.html">Archive</a></h1>
+            </div>
+            <ul class="nav-links">
+                <li><a href="index.html#features">Features</a></li>
+                <li class="dropdown">
+                    <a href="#" class="active">Documentation</a>
+                    <ul class="dropdown-menu">
+                        <li><a href="docs.html">Archive (Installer)</a></li>
+                        <li><a href="portable.html">Portable</a></li>
+                        <li><a href="console.html">Console</a></li>
+                    </ul>
+                </li>
+                <li><a href="index.html#download" class="btn-primary">Download</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="docs-layout">
+        <aside class="sidebar">
+            <nav class="docs-nav">
+                <h3>Console Application</h3>
+                <ul>
+                    <li><a href="#console-overview">Overview</a></li>
+                    <li><a href="#console-installation">Installation</a></li>
+                    <li><a href="#console-usage">Usage</a></li>
+                    <li><a href="#console-examples">Examples</a></li>
+                </ul>
+                <h3>Technical Details</h3>
+                <ul>
+                    <li><a href="#architecture">Architecture</a></li>
+                    <li><a href="#database">Database</a></li>
+                    <li><a href="#sync-algorithm">Sync Algorithm</a></li>
+                </ul>
+                <h3>Automation</h3>
+                <ul>
+                    <li><a href="#scripting">Scripting</a></li>
+                    <li><a href="#task-scheduler">Task Scheduler</a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <main class="docs-content">
+            <h1>Console Documentation</h1>
+
+            <section id="console-overview">
+                <h2>Archive Console</h2>
+                <p>Archive Console is a command-line version of Archive designed for automation, scripting, and power users who prefer terminal-based tools.</p>
+                <p>Key features:</p>
+                <ul>
+                    <li>No GUI dependencies - runs on server installations</li>
+                    <li>Perfect for scripts and automation</li>
+                    <li>Same sync engine as the GUI version</li>
+                    <li>Detailed output for logging and monitoring</li>
+                </ul>
+            </section>
+
+            <section id="console-installation">
+                <h2>Installing Console Version</h2>
+                <p>The console version is portable and requires no installation or dependencies.</p>
+                <ol>
+                    <li>Download <code>Archive.Console.zip</code> from the <a href="https://github.com/ignyos/archive/releases" target="_blank">releases page</a></li>
+                    <li>Extract to your preferred location (e.g., <code>C:\Tools\Archive</code>)</li>
+                    <li>Add the folder to your system PATH for easy access</li>
+                </ol>
+            </section>
+
+            <section id="console-usage">
+                <h2>Console Usage</h2>
+                <p>Archive Console uses a command-based interface:</p>
+                <pre><code>Archive.Console.exe &lt;command&gt; [options]</code></pre>
+                
+                <h3>Available Commands</h3>
+                
+                <h4>sync</h4>
+                <p>Synchronize files from source to destination.</p>
+                <pre><code>Archive.Console.exe sync --source &lt;path&gt; --destination &lt;path&gt; [options]</code></pre>
+                
+                <h4>Options</h4>
+                <ul>
+                    <li><code>--source</code>, <code>-s</code> : Source directory path (required)</li>
+                    <li><code>--destination</code>, <code>-d</code> : Destination directory path (required)</li>
+                    <li><code>--recursive</code>, <code>-r</code> : Include subdirectories (default: true)</li>
+                    <li><code>--delete-orphaned</code> : Delete files in destination that don't exist in source</li>
+                    <li><code>--verify</code> : Verify files after copying</li>
+                    <li><code>--dry-run</code> : Preview operations without making changes</li>
+                    <li><code>--exclude</code> : Exclude pattern (can be used multiple times)</li>
+                </ul>
+            </section>
+
+            <section id="console-examples">
+                <h2>Console Examples</h2>
+                
+                <h3>Basic Sync</h3>
+                <p>Sync documents to external drive:</p>
+                <pre><code>Archive.Console.exe sync --source "C:\Users\John\Documents" --destination "E:\Backup\Documents"</code></pre>
+                
+                <h3>Dry Run Preview</h3>
+                <p>Preview what would be copied without making changes:</p>
+                <pre><code>Archive.Console.exe sync --source "C:\Projects" --destination "D:\Backup\Projects" --dry-run</code></pre>
+                
+                <h3>Mirror Sync with Deletion</h3>
+                <p>Create an exact mirror (including deletions):</p>
+                <pre><code>Archive.Console.exe sync ^
+  --source "C:\Photos" ^
+  --destination "E:\Backup\Photos" ^
+  --delete-orphaned ^
+  --verify</code></pre>
+                
+                <h3>With Exclusions</h3>
+                <p>Exclude specific folders and files:</p>
+                <pre><code>Archive.Console.exe sync ^
+  --source "E:\" ^
+  --destination "F:\" ^
+  --exclude "$RECYCLE.BIN" ^
+  --exclude "System Volume Information" ^
+  --exclude "*.tmp"</code></pre>
+                
+                <h3>Exit Codes</h3>
+                <ul>
+                    <li><code>0</code> - Success</li>
+                    <li><code>1</code> - Error occurred</li>
+                    <li><code>2</code> - Cancelled by user</li>
+                </ul>
+            </section>
+
+            <section id="architecture">
+                <h2>Architecture</h2>
+                <p>Archive is built with a modular architecture:</p>
+                <ul>
+                    <li><strong>Archive.Core</strong> - Core sync engine and business logic</li>
+                    <li><strong>Archive.GUI</strong> - WPF desktop application</li>
+                    <li><strong>Archive.Console</strong> - Command-line interface</li>
+                </ul>
+                <p>Both GUI and Console applications use the same <code>Archive.Core</code> library, ensuring consistent behavior.</p>
+                
+                <h3>Technology Stack</h3>
+                <ul>
+                    <li>.NET 9 with C# 12</li>
+                    <li>WPF for GUI</li>
+                    <li>SQLite for database (GUI only)</li>
+                    <li>JSON configuration (Console only)</li>
+                </ul>
+            </section>
+
+            <section id="database">
+                <h2>Database Schema</h2>
+                <p>The GUI version uses SQLite to store configuration and history. The database is located at:</p>
+                <pre><code>%APPDATA%\Archive\archive.db</code></pre>
+                
+                <h3>Tables</h3>
+                <ul>
+                    <li><strong>Jobs</strong> - Backup job configurations</li>
+                    <li><strong>JobHistory</strong> - Execution history with statistics</li>
+                    <li><strong>JobLogs</strong> - Detailed file operation logs</li>
+                    <li><strong>Settings</strong> - Application settings</li>
+                </ul>
+                
+                <p>The database can be accessed directly with SQLite tools for reporting or analysis.</p>
+            </section>
+
+            <section id="sync-algorithm">
+                <h2>Sync Algorithm</h2>
+                <p>Archive uses a smart synchronization algorithm that:</p>
+                <ol>
+                    <li>Compares file modification times and sizes</li>
+                    <li>Identifies files that need to be copied or updated</li>
+                    <li>Detects orphaned files (if deletion is enabled)</li>
+                    <li>Processes files in optimal order</li>
+                    <li>Optionally verifies copied files with hash comparison</li>
+                </ol>
+                
+                <h3>File Comparison</h3>
+                <p>A file is considered different if:</p>
+                <ul>
+                    <li>The destination file doesn't exist</li>
+                    <li>File sizes differ</li>
+                    <li>Source file modification time is newer than destination</li>
+                </ul>
+                
+                <h3>Performance</h3>
+                <p>Archive is optimized for:</p>
+                <ul>
+                    <li>Fast enumeration of large directory structures</li>
+                    <li>Minimal I/O operations</li>
+                    <li>Efficient memory usage</li>
+                    <li>Cancellable operations</li>
+                </ul>
+            </section>
+
+            <section id="scripting">
+                <h2>Scripting with Archive Console</h2>
+                <p>Archive Console is perfect for automation scripts. Here's a PowerShell example:</p>
+                <pre><code># Backup script with error handling
+$source = "C:\Important\Data"
+$destination = "E:\Backups\Data"
+
+# Run backup
+& "C:\Tools\Archive\Archive.Console.exe" sync `
+    --source $source `
+    --destination $destination `
+    --verify `
+    --delete-orphaned
+
+# Check exit code
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "Backup completed successfully" -ForegroundColor Green
+    # Log success
+    Add-Content -Path "C:\Logs\backup.log" -Value "$(Get-Date): Success"
+} else {
+    Write-Host "Backup failed with code $LASTEXITCODE" -ForegroundColor Red
+    # Send alert
+    Send-MailMessage -To "admin@company.com" -Subject "Backup Failed" -Body "Check logs"
+}</code></pre>
+            </section>
+
+            <section id="task-scheduler">
+                <h2>Windows Task Scheduler</h2>
+                <p>You can use Windows Task Scheduler to run Archive Console automatically:</p>
+                <ol>
+                    <li>Open Task Scheduler</li>
+                    <li>Create a new Basic Task</li>
+                    <li>Set your desired trigger (daily, weekly, etc.)</li>
+                    <li>Action: Start a program</li>
+                    <li>Program: <code>C:\Tools\Archive\Archive.Console.exe</code></li>
+                    <li>Arguments: <code>sync --source "C:\Data" --destination "E:\Backup"</code></li>
+                </ol>
+                <div class="tip">
+                    <strong>Tip:</strong> Use the GUI version for most scheduling needs - it handles dependencies and has a built-in scheduler. Use Task Scheduler for special requirements like running as a different user.
+                </div>
+            </section>
+
+            <div class="help-section">
+                <h2>Contributing</h2>
+                <p>Archive is open source! Contributions are welcome.</p>
+                <ul>
+                    <li>Report bugs on <a href="https://github.com/ignyos/archive/issues" target="_blank">GitHub Issues</a></li>
+                    <li>Submit pull requests with improvements</li>
+                    <li>Suggest features and enhancements</li>
+                </ul>
+            </div>
+        </main>
+    </div>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 <a href="https://ignyos.com" target="_blank" rel="noopener">Ignyos</a> | 
+               <a href="https://github.com/ignyos/archive" target="_blank" rel="noopener">GitHub</a> | 
+               <a href="docs.html">Documentation</a>
+            </p>
+        </div>
+    </footer>
+</body>
+</html>

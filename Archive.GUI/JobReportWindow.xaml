@@ -1,0 +1,95 @@
+<Window x:Class="Archive.GUI.JobReportWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Job Report" Height="600" Width="700"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize">
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Job Name -->
+        <TextBlock Grid.Row="0" x:Name="TxtJobName" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
+
+        <!-- Summary -->
+        <GroupBox Grid.Row="1" x:Name="SummaryGroupBox" Header="Summary" Margin="0,0,0,10" Padding="10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Status:" FontWeight="Bold" Margin="0,0,10,5"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TxtStatus" Margin="0,0,0,5"/>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Duration:" FontWeight="Bold" Margin="0,0,10,5"/>
+                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="TxtDuration" Margin="0,0,0,5"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Files Copied:" FontWeight="Bold" Margin="0,0,10,5"/>
+                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="TxtFilesCopied" Margin="0,0,0,5"/>
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Files Updated:" FontWeight="Bold" Margin="0,0,10,5"/>
+                <TextBlock Grid.Row="3" Grid.Column="1" x:Name="TxtFilesUpdated" Margin="0,0,0,5"/>
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Files Deleted:" FontWeight="Bold" Margin="0,0,10,5"/>
+                <TextBlock Grid.Row="4" Grid.Column="1" x:Name="TxtFilesDeleted" Margin="0,0,0,5"/>
+
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="Files Skipped:" FontWeight="Bold" Margin="0,0,10,5"/>
+                <TextBlock Grid.Row="5" Grid.Column="1" x:Name="TxtFilesSkipped" Margin="0,0,0,5"/>
+
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Bytes Copied:" FontWeight="Bold" Margin="0,0,10,5"/>
+                <TextBlock Grid.Row="6" Grid.Column="1" x:Name="TxtBytesCopied" Margin="0,0,0,5"/>
+
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="Errors:" FontWeight="Bold" Margin="0,0,10,5"/>
+                <TextBlock Grid.Row="7" Grid.Column="1" x:Name="TxtErrorCount" Margin="0,0,0,5"/>
+            </Grid>
+        </GroupBox>
+
+        <!-- Details -->
+        <GroupBox Grid.Row="2" Header="Details" Padding="10">
+            <Grid>
+                <!-- Progress Panel (shown while calculating) -->
+                <StackPanel x:Name="ProgressPanel" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed">
+                    <ProgressBar IsIndeterminate="True" Height="20" Width="300" Margin="0,0,0,10"/>
+                    <TextBlock Text="Analyzing files and calculating operations..." 
+                               FontSize="14" 
+                               HorizontalAlignment="Center"
+                               Foreground="Gray"/>
+                </StackPanel>
+                
+                <!-- Details Text (shown after calculation) -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <TextBox x:Name="TxtDetails" 
+                             IsReadOnly="True" 
+                             TextWrapping="Wrap"
+                             BorderThickness="0"
+                             Background="Transparent"
+                             FontFamily="Consolas"
+                             FontSize="11"/>
+                </ScrollViewer>
+            </Grid>
+        </GroupBox>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="Close" Width="80" Height="30" Click="BtnClose_Click" IsDefault="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

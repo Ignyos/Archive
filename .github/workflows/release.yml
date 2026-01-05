@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+        
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+      
+    - name: Publish Console (Windows x64)
+      run: dotnet publish Archive.Console/Archive.Console.csproj -c Release -r win-x64 --self-contained -o ./publish/console
+      
+    - name: Check if GUI project exists
+      id: check_gui
+      run: |
+        if (Test-Path "Archive.GUI/Archive.GUI.csproj") {
+          echo "GUI_EXISTS=true" >> $env:GITHUB_OUTPUT
+        } else {
+          echo "GUI_EXISTS=false" >> $env:GITHUB_OUTPUT
+        }
+      shell: pwsh
+      
+    - name: Publish GUI (Windows x64)
+      if: steps.check_gui.outputs.GUI_EXISTS == 'true'
+      run: dotnet publish Archive.GUI/Archive.GUI.csproj -c Release -r win-x64 --self-contained -o ./publish/gui
+      
+    - name: Install Inno Setup
+      if: steps.check_gui.outputs.GUI_EXISTS == 'true'
+      run: choco install innosetup -y
+      
+    - name: Create Installer
+      if: steps.check_gui.outputs.GUI_EXISTS == 'true'
+      run: iscc setup.iss
+      shell: cmd
+      
+    - name: Get version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      shell: bash
+      
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Archive ${{ steps.get_version.outputs.VERSION }}
+        draft: false
+        prerelease: false
+        body: |
+          ## Archive ${{ steps.get_version.outputs.VERSION }}
+          
+          ### Downloads
+          - **ArchiveSetup.exe** - Installer for the graphical interface (Recommended)
+          - **Archive.exe** - Command-line interface for advanced users and scripting
+          - **ArchiveGUI.exe** - Portable GUI version (no installation required)
+          
+          ### Installation
+          **For most users:** Download and run `ArchiveSetup.exe`. This will install Archive to Program Files and create a Start Menu shortcut.
+          
+          **For portable use:** Download `ArchiveGUI.exe` or `Archive.exe` - no installation required.
+          
+          ### What's Changed
+          - See [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) for usage instructions
+          
+          ### Requirements
+          - Windows 10/11 (64-bit)
+          - No .NET runtime installation required (self-contained)
+          
+    - name: Upload Console Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./publish/console/Archive.exe
+        asset_name: Archive.exe
+        asset_content_type: application/octet-stream
+        
+    - name: Upload GUI Installer
+      if: steps.check_gui.outputs.GUI_EXISTS == 'true'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./installer/ArchiveSetup.exe
+        asset_name: ArchiveSetup.exe
+        asset_content_type: application/octet-stream
+        
+    - name: Upload GUI Portable
+      if: steps.check_gui.outputs.GUI_EXISTS == 'true'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./publish/gui/ArchiveGUI.exe
+        asset_name: ArchiveGUI.exe
+        asset_content_type: application/octet-stream
