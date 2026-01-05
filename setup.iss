@@ -5,7 +5,7 @@
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "Ignyos"
 #define MyAppURL "https://github.com/Ignyos/Archive"
-#define MyAppExeName "Archive.exe"
+#define MyAppExeName "ArchivePortable.exe"
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application.
@@ -44,7 +44,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "publish\gui\Archive.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "publish\gui\ArchivePortable.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 
@@ -68,7 +68,7 @@ begin
   if CurStep = ssPostInstall then
   begin
     // Close any running instances before installation completes
-    Exec('taskkill.exe', '/F /IM Archive.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('taskkill.exe', '/F /IM ArchivePortable.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;
 
@@ -79,6 +79,6 @@ begin
   if CurUninstallStep = usUninstall then
   begin
     // Close the application before uninstalling
-    Exec('taskkill.exe', '/F /IM Archive.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('taskkill.exe', '/F /IM ArchivePortable.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;

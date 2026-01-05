@@ -20,6 +20,10 @@ jobs:
       
     - name: Publish Console (Windows x64)
       run: dotnet publish Archive.Console/Archive.Console.csproj -c Release -r win-x64 --self-contained -o ./publish/console
+    
+    - name: Rename Console executable
+      run: Rename-Item -Path "./publish/console/Archive.exe" -NewName "ArchiveConsole.exe"
+      shell: pwsh
       
     - name: Check if GUI project exists
       id: check_gui
@@ -34,6 +38,11 @@ jobs:
     - name: Publish GUI (Windows x64)
       if: steps.check_gui.outputs.GUI_EXISTS == 'true'
       run: dotnet publish Archive.GUI/Archive.GUI.csproj -c Release -r win-x64 --self-contained -o ./publish/gui
+    
+    - name: Rename GUI executable
+      if: steps.check_gui.outputs.GUI_EXISTS == 'true'
+      run: Rename-Item -Path "./publish/gui/Archive.exe" -NewName "ArchivePortable.exe"
+      shell: pwsh
       
     - name: Install Inno Setup
       if: steps.check_gui.outputs.GUI_EXISTS == 'true'
@@ -64,13 +73,13 @@ jobs:
           
           ### Downloads
           - **ArchiveSetup.exe** - Installer for the graphical interface (Recommended)
-          - **Archive.exe** - Command-line interface for advanced users and scripting
-          - **ArchiveGUI.exe** - Portable GUI version (no installation required)
+          - **ArchivePortable.exe** - Portable GUI version (no installation required)
+          - **ArchiveConsole.exe** - Command-line interface for advanced users and scripting
           
           ### Installation
           **For most users:** Download and run `ArchiveSetup.exe`. This will install Archive to Program Files and create a Start Menu shortcut.
           
-          **For portable use:** Download `ArchiveGUI.exe` or `Archive.exe` - no installation required.
+          **For portable use:** Download `ArchivePortable.exe` or `ArchiveConsole.exe` - no installation required.
           
           ### What's Changed
           - See [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) for usage instructions
@@ -85,8 +94,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./publish/console/Archive.exe
-        asset_name: Archive.exe
+        asset_path: ./publish/console/ArchiveConsole.exe
+        asset_name: ArchiveConsole.exe
         asset_content_type: application/octet-stream
         
     - name: Upload GUI Installer
@@ -107,6 +116,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./publish/gui/ArchiveGUI.exe
-        asset_name: ArchiveGUI.exe
+        asset_path: ./publish/gui/ArchivePortable.exe
+        asset_name: ArchivePortable.exe
         asset_content_type: application/octet-stream
