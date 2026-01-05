@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Signing Policy - Archive</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <div class="nav-brand">
+                <h1><a href="index.html" style="color: inherit; text-decoration: none;">Archive</a></h1>
+            </div>
+            <ul class="nav-links">
+                <li><a href="index.html#features">Features</a></li>
+                <li class="dropdown">
+                    <a href="#">Documentation</a>
+                    <ul class="dropdown-menu">
+                        <li><a href="docs.html">Archive (Installer)</a></li>
+                        <li><a href="portable.html">Portable</a></li>
+                        <li><a href="console.html">Console</a></li>
+                    </ul>
+                </li>
+                <li><a href="index.html#download" class="btn-primary">Download</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="docs-container">
+        <div class="container">
+            <div class="docs-content">
+                <h1>Code Signing Policy</h1>
+                
+                <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 1rem 1.5rem; margin: 1.5rem 0; border-radius: 4px;">
+                    <strong>⚠️ Status: Pending Approval</strong>
+                    <p style="margin: 0.5rem 0 0 0;">We have applied for code signing through SignPath Foundation and are currently working through their approval process. Once approved, all releases will be digitally signed to verify authenticity and provide additional security assurances.</p>
+                </div>
+                
+                <section>
+                    <h2>Certificate Provider</h2>
+                    <p>Free code signing provided by <a href="https://signpath.io" target="_blank" rel="noopener">SignPath.io</a>, certificate by <a href="https://signpath.org" target="_blank" rel="noopener">SignPath Foundation</a>.</p>
+                    <p>SignPath Foundation is a non-profit certificate authority that provides free code signing certificates to open source projects that meet their requirements.</p>
+                </section>
+
+                <section>
+                    <h2>Team Roles</h2>
+                    <p>The Archive project follows SignPath Foundation's requirements for team organization:</p>
+                    
+                    <h3>Authors</h3>
+                    <p><strong>Repository Owner:</strong> <a href="https://github.com/Ignyos" target="_blank" rel="noopener">@Ignyos</a></p>
+                    <p>Authors are trusted to modify source code in the repository without additional reviews.</p>
+                    
+                    <h3>Reviewers</h3>
+                    <p><strong>Repository Owner:</strong> <a href="https://github.com/Ignyos" target="_blank" rel="noopener">@Ignyos</a></p>
+                    <p>All pull requests from external contributors are reviewed before merging.</p>
+                    
+                    <h3>Approvers</h3>
+                    <p><strong>Repository Owner:</strong> <a href="https://github.com/Ignyos" target="_blank" rel="noopener">@Ignyos</a></p>
+                    <p>Each signing request must be approved before code signing occurs.</p>
+                </section>
+
+                <section>
+                    <h2>Privacy Policy</h2>
+                    <p>Archive respects your privacy and operates entirely offline:</p>
+                    <ul>
+                        <li><strong>No data collection:</strong> Archive does not collect any user data, telemetry, or analytics.</li>
+                        <li><strong>No network communication:</strong> Archive does not transfer any information to networked systems unless specifically requested by the user (such as checking for updates).</li>
+                        <li><strong>Local operation:</strong> All backup operations occur entirely on your local system or specified network locations.</li>
+                        <li><strong>Update checks:</strong> When enabled, the application checks GitHub's public API for new releases. This request only includes the software version and does not transmit any personal information.</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h2>Build Verification</h2>
+                    <p>All signed releases of Archive are built using automated, verifiable processes:</p>
+                    <ul>
+                        <li>Binaries are built from source code in the <a href="https://github.com/Ignyos/Archive" target="_blank" rel="noopener">GitHub repository</a></li>
+                        <li>Builds are performed by GitHub Actions using the <a href="https://github.com/Ignyos/Archive/blob/main/.github/workflows/release.yml" target="_blank" rel="noopener">release workflow</a></li>
+                        <li>Build logs are publicly available for each release</li>
+                        <li>Source code matches the tagged release version</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h2>Security Best Practices</h2>
+                    <p>The Archive project follows industry security best practices:</p>
+                    <ul>
+                        <li>Multi-factor authentication enabled for repository access</li>
+                        <li>All releases require manual approval</li>
+                        <li>Code changes are tracked and auditable</li>
+                        <li>Dependencies are managed and reviewed</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h2>Open Source Compliance</h2>
+                    <p>Archive is licensed under the <a href="https://github.com/Ignyos/Archive/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>, an OSI-approved open source license.</p>
+                    <ul>
+                        <li>All source code is publicly available</li>
+                        <li>No proprietary components</li>
+                        <li>Community contributions welcome</li>
+                        <li>Transparent development process</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h2>Reporting Issues</h2>
+                    <p>If you believe a signed release violates SignPath Foundation's code of conduct or contains security issues:</p>
+                    <ul>
+                        <li><strong>SignPath Foundation:</strong> Contact <a href="mailto:support@signpath.io">support@signpath.io</a></li>
+                        <li><strong>Security Issues:</strong> Report to the <a href="https://github.com/Ignyos/Archive/security" target="_blank" rel="noopener">GitHub Security page</a></li>
+                        <li><strong>General Issues:</strong> Open an issue on <a href="https://github.com/Ignyos/Archive/issues" target="_blank" rel="noopener">GitHub Issues</a></li>
+                    </ul>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 <a href="https://ignyos.com" target="_blank" rel="noopener">Ignyos</a> | 
+               <a href="https://github.com/ignyos/archive" target="_blank" rel="noopener">GitHub</a> | 
+               <a href="docs.html">Documentation</a> |
+               <a href="code-signing-policy.html">Code Signing Policy</a>
+            </p>
+        </div>
+    </footer>
+</body>
+</html>
