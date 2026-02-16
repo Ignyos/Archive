@@ -1,0 +1,40 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run Archive (Clean & Build)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "clean-build",
+            "program": "${workspaceFolder}/src/Archive.Desktop/bin/Debug/net9.0-windows/Archive.Desktop.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/Archive.Desktop",
+            "stopAtEntry": false,
+            "console": "internalConsole"
+        },
+        {
+            "name": "Run Release Script",
+            "type": "PowerShell",
+            "request": "launch",
+            "preLaunchTask": "run-release",
+            "script": "${workspaceFolder}/release.ps1",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Run Tests",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "test",
+            "program": "dotnet",
+            "args": [
+                "test",
+                "${workspaceFolder}/Archive.sln",
+                "--configuration",
+                "Debug"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "stopAtEntry": false
+        }
+    ]
+}

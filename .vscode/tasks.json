@@ -1,0 +1,67 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "clean-build",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-Command",
+                "dotnet clean Archive.sln; dotnet build Archive.sln --configuration Debug"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "run-desktop",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-Command",
+                "dotnet run --project src/Archive.Desktop/Archive.Desktop.csproj"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "focus": true
+            },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "run-release",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}/release.ps1"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "focus": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "test",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-Command",
+                "dotnet test Archive.sln --configuration Debug"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "focus": true
+            },
+            "problemMatcher": "$msCompile"
+        }
+    ]
+}
