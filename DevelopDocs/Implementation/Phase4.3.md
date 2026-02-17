@@ -23,3 +23,30 @@
 - Saving recurring jobs persists valid cron values and schedules run at expected times
 
 - Invalid one-time or cron input is blocked and clearly explained in the dialog
+
+## Implementation tasks (suggested breakdown)
+
+- Trigger mode switching
+  - Implement Manual, One-Time, and Recurring mode selectors
+  - Show/hide mode-specific controls with state preservation rules
+  - Add mode-specific validation messages
+
+- One-Time scheduling UX
+  - Add future DateTime picker and user-friendly preview text
+  - Validate future-only constraint in real time
+  - Persist one-time value and clear conflicting cron fields
+
+- Recurring Simple tab
+  - Implement presets (hourly, daily, weekly, monthly)
+  - Generate cron from simple controls
+  - Validate weekly/monthly special constraints
+
+- Recurring Advanced + Cron tabs
+  - Build Advanced Builder controls and generated expression output
+  - Add cron text validation using Quartz parser
+  - Synchronize Advanced/Cron views when expressions are parseable
+
+- Schedule preview + persistence
+  - Compute and display next-run preview values
+  - Persist selected scheduling mode + expression/time fields
+  - Verify scheduler receives updated trigger definitions after save

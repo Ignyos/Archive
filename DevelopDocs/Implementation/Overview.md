@@ -29,6 +29,8 @@
 3.4 [Scheduling integration (Quartz + manual)](./Phase3.4.md)
 
 ## Phase 4:
+4.0 [Phase 4 recommended execution order](./Phase4.ExecutionOrder.md)
+
 4.1 [Main window + job list UX](./Phase4.1.md)
 
 4.2 [Job create/edit workflow + validation](./Phase4.2.md)

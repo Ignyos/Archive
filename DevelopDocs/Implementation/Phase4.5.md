@@ -24,3 +24,30 @@
 - Changing scheduler toggle in tray immediately pauses/resumes scheduled triggers without closing the app
 
 - Settings changes persist across app restart and affect subsequent job executions
+
+## Implementation tasks (suggested breakdown)
+
+- Tray icon + menu behaviors
+  - Add tray icon lifecycle (create, show, dispose)
+  - Implement Open Archive command and focus/restore behavior
+  - Implement Shut down Archive command with clean app exit path
+
+- Scheduler toggle integration
+  - Bind tray Scheduler Running checkbox to global schedule state
+  - Pause/resume triggers through scheduler service when toggled
+  - Reflect state changes in both tray and main UI
+
+- Startup integration
+  - Implement Run on Windows Startup setting read/write behavior
+  - Register/unregister startup entry safely
+  - Show persisted startup state on load
+
+- Settings dialog persistence
+  - Build General, Notifications, and Advanced settings sections
+  - Auto-save changes through app settings service
+  - Load settings at startup and apply at runtime
+
+- Notification behavior wiring
+  - Gate all notifications behind global enable flag
+  - Honor start/complete/fail preference switches
+  - Honor notification sound preference when notifications are enabled

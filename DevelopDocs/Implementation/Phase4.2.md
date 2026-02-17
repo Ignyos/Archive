@@ -23,3 +23,25 @@
 - Invalid configurations block Preview/OK with clear inline validation messages
 
 - Valid configurations save correctly and are reflected in the main job list
+
+## Implementation tasks (suggested breakdown)
+
+- Dialog composition
+  - Build modal sections for Basic Information, Sync Options, and Schedule
+  - Add field controls for paths, options, and enabled state
+  - Load defaults for create mode and persisted values for edit mode
+
+- Validation layer
+  - Add required and uniqueness checks for job name
+  - Add path validation (exists, accessible, source/destination relationship rules)
+  - Surface inline validation state and disable Preview/OK when invalid
+
+- Destructive option safeguards
+  - Add confirmation prompt for delete-orphaned toggle
+  - Implement Yes/No/Preview behavior from confirmation dialog
+  - Ensure canceled confirmation reverts checkbox state correctly
+
+- Preview workflow
+  - Wire Preview Operations command to dry-run service call
+  - Display progress dialog during preview computation
+  - Show preview results without persisting unsaved dialog changes

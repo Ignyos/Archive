@@ -23,3 +23,25 @@
 - Main window loads existing jobs and supports create/edit/delete/run/stop/history entry points
 
 - Status and Next Run values refresh after job changes without restarting the app
+
+## Implementation tasks (suggested breakdown)
+
+- Main window shell
+  - Create main window layout regions (menu, list, status bar)
+  - Wire menu commands for New Job, Settings, About
+  - Implement close-to-tray window behavior
+
+- Job list view model + bindings
+  - Define row model for status, enabled, name, description, next run
+  - Bind DataGrid columns and command actions
+  - Add data refresh trigger after job mutations
+
+- Row interactions
+  - Implement double-click to open Edit Job
+  - Implement context menu commands (Edit, Delete, Run Now, Stop, View History)
+  - Add History hyperlink navigation
+
+- Runtime status projection
+  - Map scheduler/runtime state to Idle/Scheduled/Running/Warning/Error
+  - Compute Next Run visibility rules (scheduled vs manual/disabled)
+  - Add lightweight polling or event-driven status refresh
