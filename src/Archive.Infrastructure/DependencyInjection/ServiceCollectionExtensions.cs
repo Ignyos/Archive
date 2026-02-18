@@ -1,4 +1,5 @@
 using Archive.Core.Jobs;
+using Archive.Infrastructure.Configuration;
 using Archive.Infrastructure.Jobs;
 using Archive.Infrastructure.Persistence;
 using Archive.Infrastructure.Scheduling;
@@ -15,26 +16,40 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("ArchiveDb")
-            ?? "Data Source=archive.db";
+        var appDataDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Archive");
+
+        var connectionStringResolver = new SqliteConnectionStringResolver(appDataDirectory);
+        var connectionString = connectionStringResolver.Resolve(configuration.GetConnectionString("ArchiveDb"));
 
         services.AddDbContext<ArchiveDbContext>(options =>
             options.UseSqlite(connectionString));
 
         services.AddSingleton<IJobExecutionService, JobExecutionService>();
         services.AddSingleton<IJobSchedulerService, JobSchedulerService>();
+        services.AddScoped<IBackupJobStateService, BackupJobStateService>();
 
         services.AddQuartz(q =>
         {
             q.UsePersistentStore(storeOptions =>
             {
                 storeOptions.UseProperties = true;
-                storeOptions.UseSQLite(connectionString);
+                storeOptions.UseBinarySerializer();
+                storeOptions.UseMicrosoftSQLite(connectionString);
             });
         });
 
         services.AddSingleton(provider =>
-            provider.GetRequiredService<ISchedulerFactory>().GetScheduler().GetAwaiter().GetResult());
+        {
+            QuartzSchemaInitializer.EnsureCreated(connectionString);
+
+            return provider
+                .GetRequiredService<ISchedulerFactory>()
+                .GetScheduler()
+                .GetAwaiter()
+                .GetResult();
+        });
 
         return services;
     }

@@ -247,24 +247,51 @@ public class JobExecutionServiceTests
 public class JobSchedulerServiceTests
 {
     [Fact]
-    public async Task RunNowAsync_Invokes_Execution_Service()
+    public async Task RunNowAsync_Schedules_And_Triggers_When_Job_Does_Not_Exist()
     {
         var scheduler = new Mock<IScheduler>();
-        var executionService = new Mock<IJobExecutionService>();
-        var service = new JobSchedulerService(scheduler.Object, executionService.Object);
+        scheduler
+            .Setup(x => x.CheckExists(It.IsAny<JobKey>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var service = new JobSchedulerService(scheduler.Object);
         var jobId = Guid.NewGuid();
 
         await service.RunNowAsync(jobId);
 
-        executionService.Verify(x => x.ExecuteAsync(jobId, It.IsAny<CancellationToken>()), Times.Once);
+        scheduler.Verify(x => x.ScheduleJob(
+                It.Is<IJobDetail>(job => job.Key.Name.Contains(jobId.ToString())),
+                It.IsAny<ITrigger>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        scheduler.Verify(x => x.TriggerJob(It.IsAny<JobKey>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RunNowAsync_Triggers_When_Job_Exists()
+    {
+        var scheduler = new Mock<IScheduler>();
+        scheduler
+            .Setup(x => x.CheckExists(It.IsAny<JobKey>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var service = new JobSchedulerService(scheduler.Object);
+        var jobId = Guid.NewGuid();
+
+        await service.RunNowAsync(jobId);
+
+        scheduler.Verify(x => x.TriggerJob(
+                It.Is<JobKey>(jobKey => jobKey.Name.Contains(jobId.ToString())),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
     public async Task ScheduleJobAsync_Registers_Quartz_Job()
     {
         var scheduler = new Mock<IScheduler>();
-        var executionService = new Mock<IJobExecutionService>();
-        var service = new JobSchedulerService(scheduler.Object, executionService.Object);
+        var service = new JobSchedulerService(scheduler.Object);
         var jobId = Guid.NewGuid();
 
         await service.ScheduleJobAsync(jobId);
@@ -272,6 +299,46 @@ public class JobSchedulerServiceTests
         scheduler.Verify(x => x.ScheduleJob(
                 It.Is<IJobDetail>(job => job.Key.Name.Contains(jobId.ToString())),
                 It.IsAny<ITrigger>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task StopAsync_Interrupts_Quartz_Job()
+    {
+        var scheduler = new Mock<IScheduler>();
+        scheduler
+            .Setup(x => x.Interrupt(It.IsAny<JobKey>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var service = new JobSchedulerService(scheduler.Object);
+        var jobId = Guid.NewGuid();
+
+        var stopped = await service.StopAsync(jobId);
+
+        Assert.True(stopped);
+        scheduler.Verify(x => x.Interrupt(
+                It.Is<JobKey>(jobKey => jobKey.Name.Contains(jobId.ToString())),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_Removes_Quartz_Job()
+    {
+        var scheduler = new Mock<IScheduler>();
+        scheduler
+            .Setup(x => x.DeleteJob(It.IsAny<JobKey>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var service = new JobSchedulerService(scheduler.Object);
+        var jobId = Guid.NewGuid();
+
+        var deleted = await service.DeleteAsync(jobId);
+
+        Assert.True(deleted);
+        scheduler.Verify(x => x.DeleteJob(
+                It.Is<JobKey>(jobKey => jobKey.Name.Contains(jobId.ToString())),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }

@@ -6,21 +6,16 @@ namespace Archive.Infrastructure.Scheduling;
 public sealed class JobSchedulerService : IJobSchedulerService
 {
     private readonly IScheduler _scheduler;
-    private readonly IJobExecutionService _executionService;
 
-    public JobSchedulerService(IScheduler scheduler, IJobExecutionService executionService)
+    public JobSchedulerService(IScheduler scheduler)
     {
         _scheduler = scheduler;
-        _executionService = executionService;
     }
 
     public async Task ScheduleJobAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
-        var jobKey = new JobKey($"archive-job-{jobId}");
-        var jobDetail = JobBuilder.Create<ArchiveJob>()
-            .WithIdentity(jobKey)
-            .UsingJobData(ArchiveJob.JobIdKey, jobId.ToString())
-            .Build();
+        var jobKey = CreateJobKey(jobId);
+        var jobDetail = CreateJobDetail(jobKey, jobId);
 
         var trigger = TriggerBuilder.Create()
             .WithIdentity($"archive-trigger-{jobId}")
@@ -30,8 +25,49 @@ public sealed class JobSchedulerService : IJobSchedulerService
         await _scheduler.ScheduleJob(jobDetail, trigger, cancellationToken);
     }
 
-    public Task RunNowAsync(Guid jobId, CancellationToken cancellationToken = default)
+    public async Task RunNowAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
-        return _executionService.ExecuteAsync(jobId, cancellationToken);
+        var jobKey = CreateJobKey(jobId);
+
+        var exists = await _scheduler.CheckExists(jobKey, cancellationToken);
+        if (!exists)
+        {
+            var jobDetail = CreateJobDetail(jobKey, jobId);
+            var trigger = TriggerBuilder.Create()
+                .WithIdentity($"archive-run-now-{jobId}-{Guid.NewGuid():N}")
+                .ForJob(jobKey)
+                .StartNow()
+                .Build();
+
+            await _scheduler.ScheduleJob(jobDetail, trigger, cancellationToken);
+            return;
+        }
+
+        await _scheduler.TriggerJob(jobKey, cancellationToken);
+    }
+
+    public Task<bool> StopAsync(Guid jobId, CancellationToken cancellationToken = default)
+    {
+        var jobKey = CreateJobKey(jobId);
+        return _scheduler.Interrupt(jobKey, cancellationToken);
+    }
+
+    public Task<bool> DeleteAsync(Guid jobId, CancellationToken cancellationToken = default)
+    {
+        var jobKey = CreateJobKey(jobId);
+        return _scheduler.DeleteJob(jobKey, cancellationToken);
+    }
+
+    private static JobKey CreateJobKey(Guid jobId)
+    {
+        return new JobKey($"archive-job-{jobId}");
+    }
+
+    private static IJobDetail CreateJobDetail(JobKey jobKey, Guid jobId)
+    {
+        return JobBuilder.Create<ArchiveJob>()
+            .WithIdentity(jobKey)
+            .UsingJobData(ArchiveJob.JobIdKey, jobId.ToString())
+            .Build();
     }
 }

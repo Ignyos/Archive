@@ -1,0 +1,39 @@
+<Window x:Class="Archive.Desktop.JobHistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Job History"
+        Height="360"
+        Width="640"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Job History"
+                   FontSize="20"
+                   FontWeight="SemiBold" />
+
+        <StackPanel Grid.Row="1" Margin="0,12,0,0">
+            <TextBlock Text="Selected Job:" FontWeight="SemiBold" />
+            <TextBlock x:Name="JobNameTextBlock" Margin="0,2,0,0" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="2"
+                   Margin="0,16,0,0"
+                   TextWrapping="Wrap"
+                   Text="Execution history grid and details drill-in will be implemented in Phase 4.4. This window is now wired as the real navigation destination from the main list." />
+
+        <StackPanel Grid.Row="3"
+                    Margin="0,16,0,0"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right">
+            <Button Content="Close"
+                    Width="88"
+                    Click="CloseButton_OnClick" />
+        </StackPanel>
+    </Grid>
+</Window>

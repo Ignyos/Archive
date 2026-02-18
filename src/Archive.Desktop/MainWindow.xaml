@@ -3,10 +3,103 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:Archive.Desktop"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="Archive"
+        Height="600"
+        Width="1000"
+        MinHeight="480"
+        MinWidth="800"
+        Closing="MainWindow_OnClosing"
+        Closed="MainWindow_OnClosed">
+    <DockPanel>
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_File">
+                <MenuItem Header="_New Job" InputGestureText="Ctrl+N" Click="NewJobMenuItem_OnClick" />
+                <MenuItem Header="_Settings" Click="SettingsMenuItem_OnClick" />
+                <MenuItem Header="_About" Click="AboutMenuItem_OnClick" />
+                <Separator />
+                <MenuItem Header="E_xit" Click="ExitMenuItem_OnClick" />
+            </MenuItem>
+        </Menu>
 
-    </Grid>
+        <StatusBar DockPanel.Dock="Bottom">
+            <StatusBarItem>
+                <TextBlock x:Name="VersionStatusTextBlock"
+                           Text="You're on the most recent version: v0.1.0" />
+            </StatusBarItem>
+        </StatusBar>
+
+        <Grid Margin="12">
+            <DataGrid x:Name="JobsDataGrid"
+                      ItemsSource="{Binding JobItems}"
+                      SelectedItem="{Binding SelectedJob, Mode=TwoWay}"
+                      PreviewMouseRightButtonDown="JobsDataGrid_OnPreviewMouseRightButtonDown"
+                      MouseDoubleClick="JobsDataGrid_OnMouseDoubleClick"
+                      CellEditEnding="JobsDataGrid_OnCellEditEnding"
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      IsReadOnly="False"
+                      SelectionMode="Single"
+                      HeadersVisibility="Column"
+                      GridLinesVisibility="Horizontal"
+                      RowHeaderWidth="0">
+                <DataGrid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Edit Job" Click="EditJobMenuItem_OnClick" />
+                        <MenuItem Header="Delete Job" Click="DeleteJobMenuItem_OnClick" />
+                        <Separator />
+                        <MenuItem Header="Run Now" Click="RunNowMenuItem_OnClick" />
+                        <MenuItem Header="Stop Job" Click="StopJobMenuItem_OnClick" />
+                        <Separator />
+                        <MenuItem Header="View History" Click="ViewHistoryMenuItem_OnClick" />
+                    </ContextMenu>
+                </DataGrid.ContextMenu>
+
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Status"
+                                        Binding="{Binding Status}"
+                                        Width="110"
+                                        IsReadOnly="True">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="Black" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Status}" Value="Warning">
+                                        <Setter Property="Foreground" Value="Red" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Status}" Value="Error">
+                                        <Setter Property="Foreground" Value="Red" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridCheckBoxColumn Header="Enabled"
+                                            Binding="{Binding Enabled}"
+                                            Width="80" />
+                    <DataGridTextColumn Header="Name"
+                                        Binding="{Binding Name}"
+                                        Width="2*"
+                                        IsReadOnly="True" />
+                    <DataGridTextColumn Header="Description"
+                                        Binding="{Binding Description}"
+                                        Width="3*"
+                                        IsReadOnly="True" />
+                    <DataGridTextColumn Header="Next Run"
+                                        Binding="{Binding NextRun, StringFormat={}{0:G}}"
+                                        Width="180"
+                                        IsReadOnly="True" />
+                    <DataGridTemplateColumn Header="History" Width="90">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock HorizontalAlignment="Center">
+                                    <Hyperlink Click="HistoryHyperlink_OnClick">View</Hyperlink>
+                                </TextBlock>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+    </DockPanel>
 </Window>
