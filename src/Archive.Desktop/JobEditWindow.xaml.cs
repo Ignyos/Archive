@@ -28,6 +28,12 @@ public partial class JobEditWindow : Window
 
         EnabledCheckBox.IsChecked = selectedJob.Enabled;
         Title = $"Edit Job - {selectedJob.Name}";
+        RefreshSchedulingUi();
+    }
+
+    private void ScheduleInput_OnChanged(object sender, RoutedEventArgs e)
+    {
+        RefreshSchedulingUi();
     }
 
     private async void SaveButton_OnClick(object sender, RoutedEventArgs e)
@@ -80,7 +86,7 @@ public partial class JobEditWindow : Window
                     return;
                 }
 
-                if (!TimeSpan.TryParse(OneTimeTimeTextBox.Text.Trim(), out var oneTimeClock))
+                if (!TimeSpan.TryParseExact(OneTimeTimeTextBox.Text.Trim(), "hh\\:mm", null, out var oneTimeClock))
                 {
                     ValidationTextBlock.Text = "One-time time must be valid (HH:mm).";
                     return;
@@ -144,5 +150,47 @@ public partial class JobEditWindow : Window
     private void CloseButton_OnClick(object sender, RoutedEventArgs e)
     {
         Close();
+    }
+
+    private void RefreshSchedulingUi()
+    {
+        if (TriggerTypeComboBox.SelectedItem is not TriggerType triggerType)
+        {
+            CronRowGrid.Visibility = Visibility.Collapsed;
+            OneTimeRowGrid.Visibility = Visibility.Collapsed;
+            SchedulePreviewTextBlock.Text = "Select a trigger type to preview schedule behavior.";
+            return;
+        }
+
+        CronRowGrid.Visibility = triggerType == TriggerType.Recurring
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        OneTimeRowGrid.Visibility = triggerType == TriggerType.OneTime
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        var oneTimeLocal = TryGetOneTimeLocalValue();
+
+        SchedulePreviewTextBlock.Text = SchedulePreviewService.Build(
+            triggerType,
+            CronExpressionTextBox.Text,
+            oneTimeLocal,
+            DateTime.Now);
+    }
+
+    private DateTime? TryGetOneTimeLocalValue()
+    {
+        if (!OneTimeDatePicker.SelectedDate.HasValue)
+        {
+            return null;
+        }
+
+        if (!TimeSpan.TryParseExact(OneTimeTimeTextBox.Text.Trim(), "hh\\:mm", null, out var clock))
+        {
+            return null;
+        }
+
+        return OneTimeDatePicker.SelectedDate.Value.Date.Add(clock);
     }
 }

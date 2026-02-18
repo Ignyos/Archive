@@ -2,12 +2,13 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Edit Job"
-        Height="520"
+        Height="580"
         Width="520"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize">
     <Grid Margin="16">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -77,20 +78,20 @@
             </Grid.ColumnDefinitions>
 
             <TextBlock VerticalAlignment="Center" Text="Trigger" />
-            <ComboBox Grid.Column="1" x:Name="TriggerTypeComboBox" />
+            <ComboBox Grid.Column="1" x:Name="TriggerTypeComboBox" SelectionChanged="ScheduleInput_OnChanged" />
         </Grid>
 
-        <Grid Grid.Row="6" Margin="0,12,0,0">
+        <Grid Grid.Row="6" Margin="0,12,0,0" x:Name="CronRowGrid">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
             <TextBlock VerticalAlignment="Center" Text="Cron" />
-            <TextBox Grid.Column="1" x:Name="CronExpressionTextBox" />
+            <TextBox Grid.Column="1" x:Name="CronExpressionTextBox" TextChanged="ScheduleInput_OnChanged" />
         </Grid>
 
-        <Grid Grid.Row="7" Margin="0,12,0,0">
+        <Grid Grid.Row="7" Margin="0,12,0,0" x:Name="OneTimeRowGrid">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
@@ -98,11 +99,12 @@
 
             <TextBlock VerticalAlignment="Top" Margin="0,4,0,0" Text="One-Time" />
             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <DatePicker x:Name="OneTimeDatePicker" Width="150" />
+                <DatePicker x:Name="OneTimeDatePicker" Width="150" SelectedDateChanged="ScheduleInput_OnChanged" />
                 <TextBox x:Name="OneTimeTimeTextBox"
                          Width="80"
                          Margin="8,0,0,0"
-                         ToolTip="HH:mm" />
+                         ToolTip="HH:mm"
+                         TextChanged="ScheduleInput_OnChanged" />
             </StackPanel>
         </Grid>
 
@@ -116,13 +118,21 @@
             <CheckBox Grid.Column="1" x:Name="EnabledCheckBox" VerticalAlignment="Center" />
         </Grid>
 
-        <TextBlock Grid.Row="9"
+        <Border Grid.Row="9"
+                Margin="0,12,0,0"
+            Padding="8">
+            <TextBlock x:Name="SchedulePreviewTextBlock"
+                       Text=""
+                       TextWrapping="Wrap" />
+        </Border>
+
+        <TextBlock Grid.Row="10"
                    Margin="0,16,0,0"
                    Foreground="Red"
                    Text=""
                    x:Name="ValidationTextBlock" />
 
-        <StackPanel Grid.Row="10"
+        <StackPanel Grid.Row="11"
                     Margin="0,16,0,0"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right">
