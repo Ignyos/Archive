@@ -1,3 +1,5 @@
+using Archive.Core.Domain.Enums;
+
 namespace Archive.Desktop;
 
 public sealed class JobListItemViewModel
@@ -15,6 +17,12 @@ public sealed class JobListItemViewModel
     public string SourcePath { get; set; } = string.Empty;
 
     public string DestinationPath { get; set; } = string.Empty;
+
+    public TriggerType TriggerType { get; set; }
+
+    public string? CronExpression { get; set; }
+
+    public DateTime? SimpleTriggerTime { get; set; }
 
     public DateTime? NextRun { get; set; }
 }

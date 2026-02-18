@@ -26,8 +26,8 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<ArchiveDbContext>(options =>
             options.UseSqlite(connectionString));
 
-        services.AddSingleton<IJobExecutionService, JobExecutionService>();
-        services.AddSingleton<IJobSchedulerService, JobSchedulerService>();
+        services.AddScoped<IJobExecutionService, JobExecutionService>();
+        services.AddScoped<IJobSchedulerService, JobSchedulerService>();
         services.AddScoped<IBackupJobStateService, BackupJobStateService>();
 
         services.AddQuartz(q =>

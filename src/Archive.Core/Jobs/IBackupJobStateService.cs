@@ -1,3 +1,5 @@
+using Archive.Core.Domain.Enums;
+
 namespace Archive.Core.Jobs;
 
 public interface IBackupJobStateService
@@ -13,5 +15,8 @@ public interface IBackupJobStateService
         string sourcePath,
         string destinationPath,
         bool enabled,
+        TriggerType triggerType,
+        string? cronExpression,
+        DateTime? simpleTriggerTime,
         CancellationToken cancellationToken = default);
 }

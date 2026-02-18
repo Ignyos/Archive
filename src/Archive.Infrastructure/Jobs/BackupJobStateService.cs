@@ -1,6 +1,8 @@
 using Archive.Core.Jobs;
+using Archive.Core.Domain.Enums;
 using Archive.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Quartz;
 
 namespace Archive.Infrastructure.Jobs;
 
@@ -55,6 +57,9 @@ public sealed class BackupJobStateService : IBackupJobStateService
         string sourcePath,
         string destinationPath,
         bool enabled,
+        TriggerType triggerType,
+        string? cronExpression,
+        DateTime? simpleTriggerTime,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sourcePath) || string.IsNullOrWhiteSpace(destinationPath))
@@ -63,6 +68,11 @@ public sealed class BackupJobStateService : IBackupJobStateService
         }
 
         if (AreEquivalentPaths(sourcePath, destinationPath))
+        {
+            return false;
+        }
+
+        if (!TryNormalizeSchedule(triggerType, cronExpression, simpleTriggerTime, out var normalizedCron, out var normalizedOneTimeUtc))
         {
             return false;
         }
@@ -80,6 +90,9 @@ public sealed class BackupJobStateService : IBackupJobStateService
         job.SourcePath = sourcePath.Trim();
         job.DestinationPath = destinationPath.Trim();
         job.Enabled = enabled;
+        job.TriggerType = triggerType;
+        job.CronExpression = normalizedCron;
+        job.SimpleTriggerTime = normalizedOneTimeUtc;
         job.ModifiedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -97,5 +110,57 @@ public sealed class BackupJobStateService : IBackupJobStateService
     {
         var trimmed = path.Trim();
         return trimmed.TrimEnd('\\', '/');
+    }
+
+    private static bool TryNormalizeSchedule(
+        TriggerType triggerType,
+        string? cronExpression,
+        DateTime? simpleTriggerTime,
+        out string? normalizedCron,
+        out DateTime? normalizedOneTimeUtc)
+    {
+        normalizedCron = null;
+        normalizedOneTimeUtc = null;
+
+        switch (triggerType)
+        {
+            case TriggerType.Manual:
+                return true;
+
+            case TriggerType.Recurring:
+            {
+                var trimmedCron = cronExpression?.Trim();
+                if (string.IsNullOrWhiteSpace(trimmedCron) || !CronExpression.IsValidExpression(trimmedCron))
+                {
+                    return false;
+                }
+
+                normalizedCron = trimmedCron;
+                return true;
+            }
+
+            case TriggerType.OneTime:
+            {
+                if (!simpleTriggerTime.HasValue)
+                {
+                    return false;
+                }
+
+                var oneTimeUtc = simpleTriggerTime.Value.Kind == DateTimeKind.Utc
+                    ? simpleTriggerTime.Value
+                    : simpleTriggerTime.Value.ToUniversalTime();
+
+                if (oneTimeUtc <= DateTime.UtcNow)
+                {
+                    return false;
+                }
+
+                normalizedOneTimeUtc = oneTimeUtc;
+                return true;
+            }
+
+            default:
+                return false;
+        }
     }
 }

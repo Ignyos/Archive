@@ -165,6 +165,8 @@ public partial class MainWindow : Window
                     job.DestinationPath,
                     job.Enabled,
                     job.TriggerType,
+                    job.CronExpression,
+                    job.SimpleTriggerTime,
                     LatestExecutionStatus = dbContext.JobExecutions
                         .Where(execution => execution.JobId == job.Id)
                         .OrderByDescending(execution => execution.StartTime)
@@ -192,6 +194,9 @@ public partial class MainWindow : Window
                     Description = row.Description,
                     SourcePath = row.SourcePath,
                     DestinationPath = row.DestinationPath,
+                    TriggerType = row.TriggerType,
+                    CronExpression = row.CronExpression,
+                    SimpleTriggerTime = row.SimpleTriggerTime,
                     NextRun = row.Enabled && row.TriggerType != TriggerType.Manual
                         ? nextRun?.LocalDateTime
                         : null

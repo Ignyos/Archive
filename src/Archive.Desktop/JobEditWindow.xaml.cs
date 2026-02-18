@@ -1,4 +1,5 @@
 using System.Windows;
+using Archive.Core.Domain.Enums;
 using Archive.Core.Jobs;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -17,6 +18,14 @@ public partial class JobEditWindow : Window
         DescriptionTextBox.Text = selectedJob.Description ?? string.Empty;
         SourcePathTextBox.Text = selectedJob.SourcePath;
         DestinationPathTextBox.Text = selectedJob.DestinationPath;
+        TriggerTypeComboBox.ItemsSource = Enum.GetValues<TriggerType>();
+        TriggerTypeComboBox.SelectedItem = selectedJob.TriggerType;
+        CronExpressionTextBox.Text = selectedJob.CronExpression ?? string.Empty;
+
+        var oneTimeLocal = selectedJob.SimpleTriggerTime?.ToLocalTime();
+        OneTimeDatePicker.SelectedDate = oneTimeLocal?.Date;
+        OneTimeTimeTextBox.Text = oneTimeLocal?.ToString("HH:mm") ?? DateTime.Now.AddHours(1).ToString("HH:mm");
+
         EnabledCheckBox.IsChecked = selectedJob.Enabled;
         Title = $"Edit Job - {selectedJob.Name}";
     }
@@ -44,6 +53,51 @@ public partial class JobEditWindow : Window
             return;
         }
 
+        if (TriggerTypeComboBox.SelectedItem is not TriggerType triggerType)
+        {
+            ValidationTextBlock.Text = "Trigger type is required.";
+            return;
+        }
+
+        string? cronExpression = null;
+        DateTime? simpleTriggerTime = null;
+
+        switch (triggerType)
+        {
+            case TriggerType.Recurring:
+                cronExpression = CronExpressionTextBox.Text.Trim();
+                if (string.IsNullOrWhiteSpace(cronExpression))
+                {
+                    ValidationTextBlock.Text = "Cron expression is required for recurring schedules.";
+                    return;
+                }
+                break;
+
+            case TriggerType.OneTime:
+                if (!OneTimeDatePicker.SelectedDate.HasValue)
+                {
+                    ValidationTextBlock.Text = "One-time date is required.";
+                    return;
+                }
+
+                if (!TimeSpan.TryParse(OneTimeTimeTextBox.Text.Trim(), out var oneTimeClock))
+                {
+                    ValidationTextBlock.Text = "One-time time must be valid (HH:mm).";
+                    return;
+                }
+
+                simpleTriggerTime = OneTimeDatePicker.SelectedDate.Value.Date.Add(oneTimeClock);
+                if (simpleTriggerTime <= DateTime.Now)
+                {
+                    ValidationTextBlock.Text = "One-time schedule must be in the future.";
+                    return;
+                }
+                break;
+
+            case TriggerType.Manual:
+                break;
+        }
+
         if (string.Equals(
                 sourcePath.TrimEnd('\\', '/'),
                 destinationPath.TrimEnd('\\', '/'),
@@ -57,6 +111,7 @@ public partial class JobEditWindow : Window
         {
             using var scope = App.Services.CreateScope();
             var backupJobStateService = scope.ServiceProvider.GetRequiredService<IBackupJobStateService>();
+            var schedulerService = scope.ServiceProvider.GetRequiredService<IJobSchedulerService>();
 
             var saved = await backupJobStateService.UpdateBasicFieldsAsync(
                 _jobId,
@@ -64,13 +119,18 @@ public partial class JobEditWindow : Window
                 DescriptionTextBox.Text,
                 sourcePath,
                 destinationPath,
-                EnabledCheckBox.IsChecked ?? false);
+                EnabledCheckBox.IsChecked ?? false,
+                triggerType,
+                cronExpression,
+                simpleTriggerTime);
 
             if (!saved)
             {
-                ValidationTextBlock.Text = "Unable to save because the job no longer exists.";
+                ValidationTextBlock.Text = "Unable to save. Check trigger and path values.";
                 return;
             }
+
+            await schedulerService.ScheduleJobAsync(_jobId);
 
             DialogResult = true;
             Close();
