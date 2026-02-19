@@ -220,6 +220,55 @@ public class JobExecutionServiceTests
         Assert.Single(execution.Logs, log => log.Level == LogLevel.Error);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_Sets_CompletedWithWarnings_When_ResultContainsWarnings()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var job = new BackupJob
+        {
+            Id = Guid.NewGuid(),
+            SourcePath = "C:\\Source",
+            DestinationPath = "D:\\Destination",
+            Enabled = true,
+            SyncMode = SyncMode.Incremental,
+            ComparisonMethod = ComparisonMethod.Fast,
+            OverwriteBehavior = OverwriteBehavior.AlwaysOverwrite,
+            TriggerType = TriggerType.Manual,
+            CreatedAt = DateTime.UtcNow,
+            ModifiedAt = DateTime.UtcNow
+        };
+        context.BackupJobs.Add(job);
+        await context.SaveChangesAsync();
+
+        var syncEngine = new StubSyncEngine(new SyncResult
+        {
+            FilesScanned = 3,
+            FilesCopied = 1,
+            FilesUpdated = 1,
+            FilesDeleted = 0,
+            FilesSkipped = 1,
+            FilesFailed = 0,
+            BytesTransferred = 100,
+            ErrorCount = 0,
+            WarningCount = 1
+        });
+
+        var service = new JobExecutionService(context, syncEngine);
+        var execution = await service.ExecuteAsync(job.Id);
+
+        Assert.Equal(JobExecutionStatus.CompletedWithWarnings, execution.Status);
+        Assert.Equal(1, execution.WarningCount);
+    }
+
     private sealed class StubSyncEngine : ISyncEngine
     {
         private readonly SyncResult _result;
@@ -341,5 +390,78 @@ public class JobSchedulerServiceTests
                 It.Is<JobKey>(jobKey => jobKey.Name.Contains(jobId.ToString())),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+}
+
+public class ArchiveScheduleControlServiceTests
+{
+    [Fact]
+    public async Task InitializeAsync_PersistsDefaultAndPausesScheduler_WhenDefaultDisabled()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var scheduler = new Mock<IScheduler>();
+        scheduler.SetupGet(x => x.IsStarted).Returns(false);
+
+        var settings = new AppSettings
+        {
+            Archive = new ArchiveSettings
+            {
+                ArchiveScheduleEnabled = false
+            }
+        };
+
+        var service = new ArchiveScheduleControlService(context, scheduler.Object, settings);
+
+        await service.InitializeAsync();
+
+        scheduler.Verify(x => x.Start(It.IsAny<CancellationToken>()), Times.Once);
+        scheduler.Verify(x => x.PauseAll(It.IsAny<CancellationToken>()), Times.Once);
+
+        var persisted = await context.AppSettings.AsNoTracking().SingleAsync(x => x.Key == "ArchiveScheduleEnabled");
+        Assert.Equal("False", persisted.Value);
+    }
+
+    [Fact]
+    public async Task SetScheduleEnabledAsync_UpdatesPersistenceAndResumesScheduler_WhenEnabled()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        context.AppSettings.Add(new AppSetting
+        {
+            Key = "ArchiveScheduleEnabled",
+            Value = "False"
+        });
+        await context.SaveChangesAsync();
+
+        var scheduler = new Mock<IScheduler>();
+        scheduler.SetupGet(x => x.IsStarted).Returns(true);
+
+        var settings = new AppSettings();
+        var service = new ArchiveScheduleControlService(context, scheduler.Object, settings);
+
+        await service.SetScheduleEnabledAsync(true);
+
+        scheduler.Verify(x => x.ResumeAll(It.IsAny<CancellationToken>()), Times.Once);
+        scheduler.Verify(x => x.PauseAll(It.IsAny<CancellationToken>()), Times.Never);
+
+        var persisted = await context.AppSettings.AsNoTracking().SingleAsync(x => x.Key == "ArchiveScheduleEnabled");
+        Assert.Equal("True", persisted.Value);
     }
 }

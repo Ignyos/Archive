@@ -1,8 +1,10 @@
 using Archive.Core.Jobs;
 using Archive.Core.Domain.Enums;
+using Archive.Core.Domain.Entities;
 using Archive.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Quartz;
+using System.IO;
 
 namespace Archive.Infrastructure.Jobs;
 
@@ -60,8 +62,17 @@ public sealed class BackupJobStateService : IBackupJobStateService
         TriggerType triggerType,
         string? cronExpression,
         DateTime? simpleTriggerTime,
+        bool recursive = true,
+        bool deleteOrphaned = false,
+        bool skipHiddenAndSystem = true,
+        bool verifyAfterCopy = false,
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
         if (string.IsNullOrWhiteSpace(sourcePath) || string.IsNullOrWhiteSpace(destinationPath))
         {
             return false;
@@ -72,12 +83,33 @@ public sealed class BackupJobStateService : IBackupJobStateService
             return false;
         }
 
+        if (IsDestinationNestedWithinSource(sourcePath, destinationPath))
+        {
+            return false;
+        }
+
         if (!TryNormalizeSchedule(triggerType, cronExpression, simpleTriggerTime, out var normalizedCron, out var normalizedOneTimeUtc))
         {
             return false;
         }
 
+        var normalizedName = name.Trim();
+
+        var duplicateNameExists = await _dbContext.BackupJobs
+            .AnyAsync(
+                x => x.Id != jobId
+                    && x.DeletedAt == null
+                    && x.Name != null
+                    && x.Name.ToLower() == normalizedName.ToLower(),
+                cancellationToken);
+
+        if (duplicateNameExists)
+        {
+            return false;
+        }
+
         var job = await _dbContext.BackupJobs
+            .Include(x => x.SyncOptions)
             .FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
 
         if (job is null)
@@ -85,7 +117,7 @@ public sealed class BackupJobStateService : IBackupJobStateService
             return false;
         }
 
-        job.Name = name;
+        job.Name = normalizedName;
         job.Description = description;
         job.SourcePath = sourcePath.Trim();
         job.DestinationPath = destinationPath.Trim();
@@ -93,6 +125,13 @@ public sealed class BackupJobStateService : IBackupJobStateService
         job.TriggerType = triggerType;
         job.CronExpression = normalizedCron;
         job.SimpleTriggerTime = normalizedOneTimeUtc;
+
+        var syncOptions = EnsureSyncOptions(job);
+        syncOptions.Recursive = recursive;
+        syncOptions.DeleteOrphaned = deleteOrphaned;
+        syncOptions.SkipHiddenAndSystem = skipHiddenAndSystem;
+        syncOptions.VerifyAfterCopy = verifyAfterCopy;
+
         job.ModifiedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -106,10 +145,51 @@ public sealed class BackupJobStateService : IBackupJobStateService
         return string.Equals(normalizedSource, normalizedDestination, StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsDestinationNestedWithinSource(string sourcePath, string destinationPath)
+    {
+        var normalizedSource = NormalizePathForComparison(sourcePath);
+        var normalizedDestination = NormalizePathForComparison(destinationPath);
+
+        if (string.IsNullOrWhiteSpace(normalizedSource) || string.IsNullOrWhiteSpace(normalizedDestination))
+        {
+            return false;
+        }
+
+        return normalizedDestination.StartsWith(
+            normalizedSource + "\\",
+            StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string NormalizePathForComparison(string path)
     {
         var trimmed = path.Trim();
-        return trimmed.TrimEnd('\\', '/');
+
+        try
+        {
+            return Path.GetFullPath(trimmed).TrimEnd('\\', '/');
+        }
+        catch
+        {
+            return trimmed.TrimEnd('\\', '/');
+        }
+    }
+
+    private SyncOptions EnsureSyncOptions(BackupJob job)
+    {
+        if (job.SyncOptions is not null)
+        {
+            return job.SyncOptions;
+        }
+
+        var syncOptions = new SyncOptions
+        {
+            Id = Guid.NewGuid()
+        };
+
+        _dbContext.SyncOptions.Add(syncOptions);
+        job.SyncOptions = syncOptions;
+        job.SyncOptionsId = syncOptions.Id;
+        return syncOptions;
     }
 
     private static bool TryNormalizeSchedule(

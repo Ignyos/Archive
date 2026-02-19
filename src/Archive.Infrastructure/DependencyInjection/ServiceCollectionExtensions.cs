@@ -1,3 +1,4 @@
+using Archive.Core.Configuration;
 using Archive.Core.Jobs;
 using Archive.Infrastructure.Configuration;
 using Archive.Infrastructure.Jobs;
@@ -29,6 +30,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IJobExecutionService, JobExecutionService>();
         services.AddScoped<IJobSchedulerService, JobSchedulerService>();
         services.AddScoped<IBackupJobStateService, BackupJobStateService>();
+        services.AddScoped<IArchiveScheduleControlService, ArchiveScheduleControlService>();
+        services.AddScoped<IArchiveApplicationSettingsService, ArchiveApplicationSettingsService>();
 
         services.AddQuartz(q =>
         {

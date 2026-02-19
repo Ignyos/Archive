@@ -1,9 +1,12 @@
 ﻿using System.Windows;
 using Archive.Core.Configuration;
+using Archive.Core.Jobs;
 using Archive.Infrastructure.DependencyInjection;
+using Archive.Infrastructure.Persistence;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using Quartz;
 using Serilog;
 
@@ -42,10 +45,13 @@ public partial class App : System.Windows.Application
 
 		Services = services.BuildServiceProvider();
 
-		if (Settings.Archive.ArchiveScheduleEnabled)
+		using (var startupScope = Services.CreateScope())
 		{
-			var scheduler = Services.GetRequiredService<IScheduler>();
-			scheduler.Start().GetAwaiter().GetResult();
+			var dbContext = startupScope.ServiceProvider.GetRequiredService<ArchiveDbContext>();
+			dbContext.Database.Migrate();
+
+			var scheduleControlService = startupScope.ServiceProvider.GetRequiredService<IArchiveScheduleControlService>();
+			scheduleControlService.InitializeAsync().GetAwaiter().GetResult();
 		}
 
 		var mainWindow = Services.GetRequiredService<MainWindow>();

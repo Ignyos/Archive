@@ -18,5 +18,9 @@ public interface IBackupJobStateService
         TriggerType triggerType,
         string? cronExpression,
         DateTime? simpleTriggerTime,
+        bool recursive = true,
+        bool deleteOrphaned = false,
+        bool skipHiddenAndSystem = true,
+        bool verifyAfterCopy = false,
         CancellationToken cancellationToken = default);
 }

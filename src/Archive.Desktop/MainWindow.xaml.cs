@@ -25,6 +25,10 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _runtimeRefreshTimer;
     private JobHistoryWindow? _jobHistoryWindow;
     private NotifyIcon? _notifyIcon;
+    private ToolStripMenuItem? _trayScheduleToggleMenuItem;
+    private ToolStripMenuItem? _trayRunOnStartupMenuItem;
+    private bool _isUpdatingScheduleToggleUi;
+    private bool _scheduleEnabled = true;
 
     public ObservableCollection<JobListItemViewModel> JobItems { get; } = [];
 
@@ -36,6 +40,7 @@ public partial class MainWindow : Window
         DataContext = this;
         InitializeStatusBarText();
         InitializeTrayIcon();
+        InitializeScheduleToggleState();
         _runtimeRefreshTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(10)
@@ -76,7 +81,25 @@ public partial class MainWindow : Window
         var menu = new ContextMenuStrip();
         menu.Items.Add("Open Archive", null, (_, _) => RestoreFromTray());
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Exit", null, (_, _) => ExitApplication());
+
+        _trayScheduleToggleMenuItem = new ToolStripMenuItem("Schedule Enabled")
+        {
+            CheckOnClick = true,
+            Checked = true
+        };
+        _trayScheduleToggleMenuItem.Click += TrayScheduleToggleMenuItem_OnClick;
+        menu.Items.Add(_trayScheduleToggleMenuItem);
+
+        _trayRunOnStartupMenuItem = new ToolStripMenuItem("Run on Windows Startup")
+        {
+            CheckOnClick = true,
+            Checked = WindowsStartupRegistrationService.IsEnabled()
+        };
+        _trayRunOnStartupMenuItem.Click += TrayRunOnStartupMenuItem_OnClick;
+        menu.Items.Add(_trayRunOnStartupMenuItem);
+
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Shut down Archive", null, (_, _) => ExitApplication());
         return menu;
     }
 
@@ -102,7 +125,17 @@ public partial class MainWindow : Window
 
     private void SettingsMenuItem_OnClick(object sender, RoutedEventArgs e)
     {
-        System.Windows.MessageBox.Show("Settings window will be implemented in Phase 4.5.", "Archive", MessageBoxButton.OK, MessageBoxImage.Information);
+        var settingsWindow = new SettingsWindow()
+        {
+            Owner = this
+        };
+
+        settingsWindow.ShowDialog();
+
+        if (_trayRunOnStartupMenuItem is not null)
+        {
+            _trayRunOnStartupMenuItem.Checked = WindowsStartupRegistrationService.IsEnabled();
+        }
     }
 
     private void AboutMenuItem_OnClick(object sender, RoutedEventArgs e)
@@ -164,6 +197,13 @@ public partial class MainWindow : Window
                     job.SourcePath,
                     job.DestinationPath,
                     job.Enabled,
+                    job.SyncMode,
+                    job.ComparisonMethod,
+                    job.OverwriteBehavior,
+                    SyncRecursive = job.SyncOptions != null ? job.SyncOptions.Recursive : true,
+                    SyncDeleteOrphaned = job.SyncOptions != null && job.SyncOptions.DeleteOrphaned,
+                    SyncSkipHiddenAndSystem = job.SyncOptions == null || job.SyncOptions.SkipHiddenAndSystem,
+                    SyncVerifyAfterCopy = job.SyncOptions != null && job.SyncOptions.VerifyAfterCopy,
                     job.TriggerType,
                     job.CronExpression,
                     job.SimpleTriggerTime,
@@ -197,6 +237,13 @@ public partial class MainWindow : Window
                     TriggerType = row.TriggerType,
                     CronExpression = row.CronExpression,
                     SimpleTriggerTime = row.SimpleTriggerTime,
+                    Recursive = row.SyncRecursive,
+                    DeleteOrphaned = row.SyncDeleteOrphaned,
+                    SkipHiddenAndSystem = row.SyncSkipHiddenAndSystem,
+                    VerifyAfterCopy = row.SyncVerifyAfterCopy,
+                    SyncMode = row.SyncMode,
+                    ComparisonMethod = row.ComparisonMethod,
+                    OverwriteBehavior = row.OverwriteBehavior,
                     NextRun = row.Enabled && row.TriggerType != TriggerType.Manual
                         ? nextRun?.LocalDateTime
                         : null
@@ -292,6 +339,55 @@ public partial class MainWindow : Window
     private void ShowNotImplementedMessage(string title, string message)
     {
         System.Windows.MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void InitializeScheduleToggleState()
+    {
+        try
+        {
+            using var scope = App.Services.CreateScope();
+            var scheduleControlService = scope.ServiceProvider.GetRequiredService<IArchiveScheduleControlService>();
+            _scheduleEnabled = scheduleControlService.GetScheduleEnabledAsync().GetAwaiter().GetResult();
+            UpdateScheduleToggleUi(_scheduleEnabled);
+        }
+        catch
+        {
+            UpdateScheduleToggleUi(true);
+        }
+    }
+
+    private void UpdateScheduleToggleUi(bool enabled)
+    {
+        _isUpdatingScheduleToggleUi = true;
+        _scheduleEnabled = enabled;
+
+        if (ScheduleEnabledCheckBox is not null)
+        {
+            ScheduleEnabledCheckBox.IsChecked = enabled;
+        }
+
+        if (_trayScheduleToggleMenuItem is not null)
+        {
+            _trayScheduleToggleMenuItem.Checked = enabled;
+        }
+
+        _isUpdatingScheduleToggleUi = false;
+    }
+
+    private void ApplyScheduleToggle(bool enabled)
+    {
+        try
+        {
+            using var scope = App.Services.CreateScope();
+            var scheduleControlService = scope.ServiceProvider.GetRequiredService<IArchiveScheduleControlService>();
+            scheduleControlService.SetScheduleEnabledAsync(enabled).GetAwaiter().GetResult();
+            UpdateScheduleToggleUi(enabled);
+        }
+        catch
+        {
+            ShowNotImplementedMessage("Archive", "Unable to update schedule state. Check logs for details.");
+            UpdateScheduleToggleUi(_scheduleEnabled);
+        }
     }
 
     private void OpenEditJob(JobListItemViewModel? selectedJob)
@@ -546,6 +642,50 @@ public partial class MainWindow : Window
         {
             ShowNotImplementedMessage("Archive", "Unable to update the job enabled state. Check logs for details.");
             RefreshJobList();
+        }
+    }
+
+    private void ScheduleEnabledCheckBox_OnChecked(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingScheduleToggleUi)
+        {
+            return;
+        }
+
+        ApplyScheduleToggle(true);
+    }
+
+    private void ScheduleEnabledCheckBox_OnUnchecked(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingScheduleToggleUi)
+        {
+            return;
+        }
+
+        ApplyScheduleToggle(false);
+    }
+
+    private void TrayScheduleToggleMenuItem_OnClick(object? sender, EventArgs e)
+    {
+        if (_isUpdatingScheduleToggleUi || _trayScheduleToggleMenuItem is null)
+        {
+            return;
+        }
+
+        ApplyScheduleToggle(_trayScheduleToggleMenuItem.Checked);
+    }
+
+    private void TrayRunOnStartupMenuItem_OnClick(object? sender, EventArgs e)
+    {
+        if (_trayRunOnStartupMenuItem is null)
+        {
+            return;
+        }
+
+        if (!WindowsStartupRegistrationService.SetEnabled(_trayRunOnStartupMenuItem.Checked))
+        {
+            ShowNotImplementedMessage("Archive", "Unable to update Windows startup registration.");
+            _trayRunOnStartupMenuItem.Checked = WindowsStartupRegistrationService.IsEnabled();
         }
     }
 }

@@ -508,4 +508,188 @@ public class BackupJobStateServiceTests
             Assert.Null(updated.SimpleTriggerTime);
         }
     }
+
+    [Fact]
+    public async Task UpdateBasicFieldsAsync_ReturnsFalse_WhenNameAlreadyUsedByAnotherActiveJob()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        var jobToUpdateId = Guid.NewGuid();
+        var existingNameJobId = Guid.NewGuid();
+
+        await using (var seedContext = new ArchiveDbContext(options))
+        {
+            await seedContext.Database.EnsureCreatedAsync();
+
+            seedContext.BackupJobs.AddRange(
+                new BackupJob
+                {
+                    Id = jobToUpdateId,
+                    Name = "Original Name",
+                    SourcePath = "C:\\SourceA",
+                    DestinationPath = "D:\\DestA",
+                    Enabled = true,
+                    TriggerType = TriggerType.Manual,
+                    CreatedAt = DateTime.UtcNow.AddMinutes(-10),
+                    ModifiedAt = DateTime.UtcNow.AddMinutes(-10)
+                },
+                new BackupJob
+                {
+                    Id = existingNameJobId,
+                    Name = "Finance Backup",
+                    SourcePath = "C:\\SourceB",
+                    DestinationPath = "D:\\DestB",
+                    Enabled = true,
+                    TriggerType = TriggerType.Manual,
+                    CreatedAt = DateTime.UtcNow.AddMinutes(-10),
+                    ModifiedAt = DateTime.UtcNow.AddMinutes(-10)
+                });
+
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using (var context = new ArchiveDbContext(options))
+        {
+            var service = new BackupJobStateService(context);
+            var before = await context.BackupJobs.AsNoTracking().SingleAsync(x => x.Id == jobToUpdateId);
+
+            var result = await service.UpdateBasicFieldsAsync(
+                jobToUpdateId,
+                "finance backup",
+                null,
+                "C:\\SourceA",
+                "D:\\DestA",
+                true,
+                TriggerType.Manual,
+                null,
+                null);
+
+            Assert.False(result);
+
+            var unchanged = await context.BackupJobs.AsNoTracking().SingleAsync(x => x.Id == jobToUpdateId);
+            Assert.Equal(before.Name, unchanged.Name);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateBasicFieldsAsync_ReturnsFalse_WhenDestinationIsNestedUnderSource()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        var jobId = Guid.NewGuid();
+
+        await using (var seedContext = new ArchiveDbContext(options))
+        {
+            await seedContext.Database.EnsureCreatedAsync();
+
+            seedContext.BackupJobs.Add(new BackupJob
+            {
+                Id = jobId,
+                Name = "Nested Validation",
+                SourcePath = "C:\\Source",
+                DestinationPath = "D:\\Dest",
+                Enabled = true,
+                TriggerType = TriggerType.Manual,
+                CreatedAt = DateTime.UtcNow.AddMinutes(-10),
+                ModifiedAt = DateTime.UtcNow.AddMinutes(-10)
+            });
+
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using (var context = new ArchiveDbContext(options))
+        {
+            var service = new BackupJobStateService(context);
+
+            var result = await service.UpdateBasicFieldsAsync(
+                jobId,
+                "Nested Validation",
+                null,
+                "C:\\Data",
+                "C:\\Data\\Backups",
+                true,
+                TriggerType.Manual,
+                null,
+                null);
+
+            Assert.False(result);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateBasicFieldsAsync_CreatesAndUpdatesSyncOptions_WhenMissingOnJob()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        var jobId = Guid.NewGuid();
+
+        await using (var seedContext = new ArchiveDbContext(options))
+        {
+            await seedContext.Database.EnsureCreatedAsync();
+
+            seedContext.BackupJobs.Add(new BackupJob
+            {
+                Id = jobId,
+                Name = "SyncOptions Job",
+                SourcePath = "C:\\Source",
+                DestinationPath = "D:\\Dest",
+                Enabled = true,
+                TriggerType = TriggerType.Manual,
+                SyncOptionsId = null,
+                CreatedAt = DateTime.UtcNow.AddMinutes(-10),
+                ModifiedAt = DateTime.UtcNow.AddMinutes(-10)
+            });
+
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using (var context = new ArchiveDbContext(options))
+        {
+            var service = new BackupJobStateService(context);
+
+            var result = await service.UpdateBasicFieldsAsync(
+                jobId,
+                "SyncOptions Job",
+                "Updated",
+                "C:\\Source",
+                "D:\\Dest",
+                true,
+                TriggerType.Manual,
+                null,
+                null,
+                recursive: false,
+                deleteOrphaned: true,
+                skipHiddenAndSystem: false,
+                verifyAfterCopy: true);
+
+            Assert.True(result);
+
+            var updated = await context.BackupJobs
+                .AsNoTracking()
+                .Include(x => x.SyncOptions)
+                .SingleAsync(x => x.Id == jobId);
+
+            Assert.NotNull(updated.SyncOptionsId);
+            Assert.NotNull(updated.SyncOptions);
+            Assert.False(updated.SyncOptions!.Recursive);
+            Assert.True(updated.SyncOptions.DeleteOrphaned);
+            Assert.False(updated.SyncOptions.SkipHiddenAndSystem);
+            Assert.True(updated.SyncOptions.VerifyAfterCopy);
+        }
+    }
 }

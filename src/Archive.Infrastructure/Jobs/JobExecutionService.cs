@@ -41,7 +41,9 @@ public sealed class JobExecutionService : IJobExecutionService
         {
             var result = await _syncEngine.ExecuteAsync(job, cancellationToken);
 
-            execution.Status = JobExecutionStatus.Completed;
+            execution.Status = result.WarningCount > 0 || result.ErrorCount > 0 || result.FilesFailed > 0
+                ? JobExecutionStatus.CompletedWithWarnings
+                : JobExecutionStatus.Completed;
             execution.EndTime = DateTime.UtcNow;
             execution.Duration = execution.EndTime - execution.StartTime;
             execution.FilesScanned = result.FilesScanned;

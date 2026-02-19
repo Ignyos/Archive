@@ -24,5 +24,19 @@ public sealed class JobListItemViewModel
 
     public DateTime? SimpleTriggerTime { get; set; }
 
+    public bool Recursive { get; set; } = true;
+
+    public bool DeleteOrphaned { get; set; }
+
+    public bool SkipHiddenAndSystem { get; set; } = true;
+
+    public bool VerifyAfterCopy { get; set; }
+
+    public SyncMode SyncMode { get; set; }
+
+    public ComparisonMethod ComparisonMethod { get; set; }
+
+    public OverwriteBehavior OverwriteBehavior { get; set; }
+
     public DateTime? NextRun { get; set; }
 }
