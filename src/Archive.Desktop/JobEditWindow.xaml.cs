@@ -12,17 +12,57 @@ namespace Archive.Desktop;
 public partial class JobEditWindow : Window
 {
     private readonly Guid _jobId;
+    private readonly bool _isCreateMode;
     private readonly SyncMode _syncMode;
     private readonly ComparisonMethod _comparisonMethod;
     private readonly OverwriteBehavior _overwriteBehavior;
     private RecurringScheduleMode? _previousRecurringMode;
     private bool _suppressDeleteOrphanedPrompt;
 
+    public JobEditWindow()
+    {
+        InitializeComponent();
+
+        _jobId = Guid.NewGuid();
+        _isCreateMode = true;
+        _syncMode = SyncMode.Incremental;
+        _comparisonMethod = ComparisonMethod.Fast;
+        _overwriteBehavior = OverwriteBehavior.AlwaysOverwrite;
+
+        TriggerTypeComboBox.ItemsSource = Enum.GetValues<TriggerType>();
+        RecurringModeComboBox.ItemsSource = Enum.GetValues<RecurringScheduleMode>();
+        SimpleFrequencyComboBox.ItemsSource = Enum.GetValues<SimpleRecurringFrequency>();
+        SimpleDayOfWeekComboBox.ItemsSource = Enum.GetValues<DayOfWeek>();
+
+        NameTextBox.Text = string.Empty;
+        DescriptionTextBox.Text = string.Empty;
+        SourcePathTextBox.Text = string.Empty;
+        DestinationPathTextBox.Text = string.Empty;
+        TriggerTypeComboBox.SelectedItem = TriggerType.Manual;
+        CronExpressionTextBox.Text = string.Empty;
+        InitializeRecurringMode(null);
+        OneTimeDatePicker.SelectedDate = DateTime.Now.AddDays(1).Date;
+        OneTimeTimeTextBox.Text = DateTime.Now.AddHours(1).ToString("HH:mm");
+
+        _suppressDeleteOrphanedPrompt = true;
+        RecursiveCheckBox.IsChecked = true;
+        DeleteOrphanedCheckBox.IsChecked = false;
+        SkipHiddenAndSystemCheckBox.IsChecked = true;
+        VerifyAfterCopyCheckBox.IsChecked = false;
+        _suppressDeleteOrphanedPrompt = false;
+
+        EnabledCheckBox.IsChecked = true;
+        Title = "New Job";
+        HeaderTextBlock.Text = "New Job";
+        RefreshSchedulingUi();
+    }
+
     public JobEditWindow(JobListItemViewModel selectedJob)
     {
         InitializeComponent();
 
         _jobId = selectedJob.Id;
+        _isCreateMode = false;
         _syncMode = selectedJob.SyncMode;
         _comparisonMethod = selectedJob.ComparisonMethod;
         _overwriteBehavior = selectedJob.OverwriteBehavior;
@@ -54,6 +94,7 @@ public partial class JobEditWindow : Window
 
         EnabledCheckBox.IsChecked = selectedJob.Enabled;
         Title = $"Edit Job - {selectedJob.Name}";
+        HeaderTextBlock.Text = "Edit Job";
         RefreshSchedulingUi();
     }
 
@@ -160,7 +201,6 @@ public partial class JobEditWindow : Window
         try
         {
             using var scope = App.Services.CreateScope();
-            var backupJobStateService = scope.ServiceProvider.GetRequiredService<IBackupJobStateService>();
             var schedulerService = scope.ServiceProvider.GetRequiredService<IJobSchedulerService>();
             var dbContext = scope.ServiceProvider.GetRequiredService<Archive.Infrastructure.Persistence.ArchiveDbContext>();
 
@@ -178,20 +218,9 @@ public partial class JobEditWindow : Window
                 return;
             }
 
-            var saved = await backupJobStateService.UpdateBasicFieldsAsync(
-                _jobId,
-                name,
-                DescriptionTextBox.Text,
-                sourcePath,
-                destinationPath,
-                EnabledCheckBox.IsChecked ?? false,
-                triggerType,
-                cronExpression,
-                simpleTriggerTime,
-                recursive: RecursiveCheckBox.IsChecked ?? true,
-                deleteOrphaned: DeleteOrphanedCheckBox.IsChecked ?? false,
-                skipHiddenAndSystem: SkipHiddenAndSystemCheckBox.IsChecked ?? true,
-                verifyAfterCopy: VerifyAfterCopyCheckBox.IsChecked ?? false);
+            var saved = _isCreateMode
+                ? await CreateJobAsync(dbContext, name, sourcePath, destinationPath, triggerType, cronExpression, simpleTriggerTime)
+                : await UpdateJobAsync(scope.ServiceProvider, name, sourcePath, destinationPath, triggerType, cronExpression, simpleTriggerTime);
 
             if (!saved)
             {
@@ -208,6 +237,84 @@ public partial class JobEditWindow : Window
         {
             ValidationTextBlock.Text = "Unable to save changes. Check logs for details.";
         }
+    }
+
+    private async Task<bool> UpdateJobAsync(
+        IServiceProvider serviceProvider,
+        string name,
+        string sourcePath,
+        string destinationPath,
+        TriggerType triggerType,
+        string? cronExpression,
+        DateTime? simpleTriggerTime)
+    {
+        var backupJobStateService = serviceProvider.GetRequiredService<IBackupJobStateService>();
+        return await backupJobStateService.UpdateBasicFieldsAsync(
+            _jobId,
+            name,
+            DescriptionTextBox.Text,
+            sourcePath,
+            destinationPath,
+            EnabledCheckBox.IsChecked ?? false,
+            triggerType,
+            cronExpression,
+            simpleTriggerTime,
+            recursive: RecursiveCheckBox.IsChecked ?? true,
+            deleteOrphaned: DeleteOrphanedCheckBox.IsChecked ?? false,
+            skipHiddenAndSystem: SkipHiddenAndSystemCheckBox.IsChecked ?? true,
+            verifyAfterCopy: VerifyAfterCopyCheckBox.IsChecked ?? false);
+    }
+
+    private async Task<bool> CreateJobAsync(
+        Archive.Infrastructure.Persistence.ArchiveDbContext dbContext,
+        string name,
+        string sourcePath,
+        string destinationPath,
+        TriggerType triggerType,
+        string? cronExpression,
+        DateTime? simpleTriggerTime)
+    {
+        var now = DateTime.UtcNow;
+
+        var normalizedOneTimeUtc = simpleTriggerTime.HasValue
+            ? (simpleTriggerTime.Value.Kind == DateTimeKind.Utc
+                ? simpleTriggerTime.Value
+                : simpleTriggerTime.Value.ToUniversalTime())
+            : (DateTime?)null;
+
+        var syncOptions = new SyncOptions
+        {
+            Id = Guid.NewGuid(),
+            Recursive = RecursiveCheckBox.IsChecked ?? true,
+            DeleteOrphaned = DeleteOrphanedCheckBox.IsChecked ?? false,
+            SkipHiddenAndSystem = SkipHiddenAndSystemCheckBox.IsChecked ?? true,
+            VerifyAfterCopy = VerifyAfterCopyCheckBox.IsChecked ?? false
+        };
+
+        var job = new BackupJob
+        {
+            Id = _jobId,
+            Name = name,
+            Description = DescriptionTextBox.Text,
+            SourcePath = sourcePath,
+            DestinationPath = destinationPath,
+            Enabled = EnabledCheckBox.IsChecked ?? false,
+            TriggerType = triggerType,
+            CronExpression = triggerType == TriggerType.Recurring ? cronExpression : null,
+            SimpleTriggerTime = triggerType == TriggerType.OneTime ? normalizedOneTimeUtc : null,
+            SyncMode = _syncMode,
+            ComparisonMethod = _comparisonMethod,
+            OverwriteBehavior = _overwriteBehavior,
+            SyncOptions = syncOptions,
+            SyncOptionsId = syncOptions.Id,
+            CreatedAt = now,
+            ModifiedAt = now
+        };
+
+        dbContext.SyncOptions.Add(syncOptions);
+        dbContext.BackupJobs.Add(job);
+        await dbContext.SaveChangesAsync();
+        return true;
     }
 
     private void PreviewOperationsButton_OnClick(object sender, RoutedEventArgs e)

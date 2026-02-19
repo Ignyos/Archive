@@ -2,6 +2,22 @@
 
 This document converts Phase 4 task lists into a dependency-aware implementation sequence.
 
+## Implementation snapshot (2026-02-19)
+
+- Wave 1: Completed
+- Wave 2: Completed
+- Wave 3: Completed
+- Wave 4: Completed
+- Wave 5: Completed
+
+Completed Wave 5 items:
+- 17) Recurring Advanced + Cron tab synchronization
+- 18) Scheduler toggle integration (tray + main UI)
+- 19) Settings persistence (General/Notifications/Advanced with auto-save)
+- 20) Startup integration and notification preference wiring
+	- Includes startup migration + retention prune, startup registration behavior, and per-event notification preference resolution.
+	- Notification delivery uses stable tray notifications with rate limiting/deduplication for the current target.
+
 ## Ordering principles
 
 - Build core navigation and data surfaces first.

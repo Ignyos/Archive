@@ -40,3 +40,6 @@
 4.4 [Job history + execution details UX](./Phase4.4.md)
 
 4.5 [System tray + settings + notifications](./Phase4.5.md)
+
+## Phase 5:
+5.0 [Phase 5 recommended execution order](./Phase5.ExecutionOrder.md)

@@ -3,6 +3,7 @@ using Archive.Core.Domain.Entities;
 using Archive.Core.Domain.Enums;
 using Archive.Core.Jobs;
 using Archive.Core.Sync;
+using Archive.Infrastructure.Configuration;
 using Archive.Infrastructure.Jobs;
 using Archive.Infrastructure.Persistence;
 using Archive.Infrastructure.Scheduling;
@@ -269,6 +270,187 @@ public class JobExecutionServiceTests
         Assert.Equal(1, execution.WarningCount);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_Invokes_RetentionPrune_After_Execution()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var job = new BackupJob
+        {
+            Id = Guid.NewGuid(),
+            SourcePath = "C:\\Source",
+            DestinationPath = "D:\\Destination",
+            Enabled = true,
+            SyncMode = SyncMode.Incremental,
+            ComparisonMethod = ComparisonMethod.Fast,
+            OverwriteBehavior = OverwriteBehavior.AlwaysOverwrite,
+            TriggerType = TriggerType.Manual,
+            CreatedAt = DateTime.UtcNow,
+            ModifiedAt = DateTime.UtcNow
+        };
+        context.BackupJobs.Add(job);
+        await context.SaveChangesAsync();
+
+        var syncEngine = new StubSyncEngine(new SyncResult
+        {
+            FilesScanned = 1,
+            FilesCopied = 1,
+            BytesTransferred = 1
+        });
+
+        var retentionService = new Mock<IExecutionLogRetentionService>();
+        retentionService
+            .Setup(x => x.PruneAsync(It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var service = new JobExecutionService(context, syncEngine, retentionService.Object);
+        await service.ExecuteAsync(job.Id);
+
+        retentionService.Verify(x => x.PruneAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Publishes_Start_And_Completed_Notifications()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var job = new BackupJob
+        {
+            Id = Guid.NewGuid(),
+            Name = "Notify Success",
+            SourcePath = "C:\\Source",
+            DestinationPath = "D:\\Destination",
+            Enabled = true,
+            SyncMode = SyncMode.Incremental,
+            ComparisonMethod = ComparisonMethod.Fast,
+            OverwriteBehavior = OverwriteBehavior.AlwaysOverwrite,
+            TriggerType = TriggerType.Manual,
+            NotifyOnStart = true,
+            NotifyOnComplete = true,
+            CreatedAt = DateTime.UtcNow,
+            ModifiedAt = DateTime.UtcNow
+        };
+        context.BackupJobs.Add(job);
+        await context.SaveChangesAsync();
+
+        var syncEngine = new StubSyncEngine(new SyncResult
+        {
+            FilesScanned = 1,
+            FilesCopied = 1,
+            FilesUpdated = 0,
+            FilesDeleted = 0,
+            FilesSkipped = 0,
+            FilesFailed = 0,
+            BytesTransferred = 10,
+            ErrorCount = 0,
+            WarningCount = 0
+        });
+
+        var published = new List<JobExecutionNotificationEvent>();
+        void Handler(JobExecutionNotificationEvent evt)
+        {
+            if (evt.JobId == job.Id)
+            {
+                published.Add(evt);
+            }
+        }
+        JobExecutionNotificationHub.Published += Handler;
+
+        try
+        {
+            var service = new JobExecutionService(context, syncEngine);
+            await service.ExecuteAsync(job.Id);
+        }
+        finally
+        {
+            JobExecutionNotificationHub.Published -= Handler;
+        }
+
+        Assert.Equal(2, published.Count);
+        Assert.Equal(JobExecutionNotificationKind.Started, published[0].Kind);
+        Assert.Equal(JobExecutionNotificationKind.Completed, published[1].Kind);
+        Assert.Equal("Notify Success", published[0].JobName);
+        Assert.True(published[0].NotifyOnStartOverride);
+        Assert.True(published[1].NotifyOnCompleteOverride);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Publishes_Failed_Notification_When_Sync_Throws()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var job = new BackupJob
+        {
+            Id = Guid.NewGuid(),
+            Name = "Notify Failure",
+            SourcePath = "C:\\Source",
+            DestinationPath = "D:\\Destination",
+            Enabled = true,
+            SyncMode = SyncMode.Incremental,
+            ComparisonMethod = ComparisonMethod.Fast,
+            OverwriteBehavior = OverwriteBehavior.AlwaysOverwrite,
+            TriggerType = TriggerType.Manual,
+            NotifyOnFail = true,
+            CreatedAt = DateTime.UtcNow,
+            ModifiedAt = DateTime.UtcNow
+        };
+        context.BackupJobs.Add(job);
+        await context.SaveChangesAsync();
+
+        var syncEngine = new ThrowingSyncEngine();
+
+        var published = new List<JobExecutionNotificationEvent>();
+        void Handler(JobExecutionNotificationEvent evt)
+        {
+            if (evt.JobId == job.Id)
+            {
+                published.Add(evt);
+            }
+        }
+        JobExecutionNotificationHub.Published += Handler;
+
+        try
+        {
+            var service = new JobExecutionService(context, syncEngine);
+            await service.ExecuteAsync(job.Id);
+        }
+        finally
+        {
+            JobExecutionNotificationHub.Published -= Handler;
+        }
+
+        Assert.Equal(2, published.Count);
+        Assert.Equal(JobExecutionNotificationKind.Started, published[0].Kind);
+        Assert.Equal(JobExecutionNotificationKind.Failed, published[1].Kind);
+        Assert.Equal(JobExecutionStatus.Failed, published[1].Status);
+        Assert.True(published[1].NotifyOnFailOverride);
+        Assert.Contains("Simulated failure", published[1].DetailSummary);
+    }
+
     private sealed class StubSyncEngine : ISyncEngine
     {
         private readonly SyncResult _result;
@@ -463,5 +645,228 @@ public class ArchiveScheduleControlServiceTests
 
         var persisted = await context.AppSettings.AsNoTracking().SingleAsync(x => x.Key == "ArchiveScheduleEnabled");
         Assert.Equal("True", persisted.Value);
+    }
+}
+
+public class ArchiveApplicationSettingsServiceTests
+{
+    [Fact]
+    public async Task GetAsync_Returns_Defaults_When_NoRowsExist()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var service = new ArchiveApplicationSettingsService(context);
+        var settings = await service.GetAsync();
+
+        Assert.False(settings.RunOnWindowsStartup);
+        Assert.True(settings.EnableNotifications);
+        Assert.False(settings.NotifyOnStart);
+        Assert.True(settings.NotifyOnComplete);
+        Assert.True(settings.NotifyOnFail);
+        Assert.True(settings.PlayNotificationSound);
+        Assert.Equal(14, settings.LogRetentionValue);
+        Assert.Equal(LogRetentionUnit.Days, settings.LogRetentionUnit);
+        Assert.False(settings.EnableVerboseLogging);
+    }
+
+    [Fact]
+    public async Task SetAsync_Persists_And_GetAsync_Reads_Back_AllValues()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var service = new ArchiveApplicationSettingsService(context);
+
+        var expected = new ArchiveApplicationSettings
+        {
+            RunOnWindowsStartup = true,
+            EnableNotifications = true,
+            NotifyOnStart = true,
+            NotifyOnComplete = false,
+            NotifyOnFail = true,
+            PlayNotificationSound = false,
+            LogRetentionValue = 2,
+            LogRetentionUnit = LogRetentionUnit.Months,
+            EnableVerboseLogging = true
+        };
+
+        await service.SetAsync(expected);
+
+        var actual = await service.GetAsync();
+
+        Assert.Equal(expected.RunOnWindowsStartup, actual.RunOnWindowsStartup);
+        Assert.Equal(expected.EnableNotifications, actual.EnableNotifications);
+        Assert.Equal(expected.NotifyOnStart, actual.NotifyOnStart);
+        Assert.Equal(expected.NotifyOnComplete, actual.NotifyOnComplete);
+        Assert.Equal(expected.NotifyOnFail, actual.NotifyOnFail);
+        Assert.Equal(expected.PlayNotificationSound, actual.PlayNotificationSound);
+        Assert.Equal(expected.LogRetentionValue, actual.LogRetentionValue);
+        Assert.Equal(expected.LogRetentionUnit, actual.LogRetentionUnit);
+        Assert.Equal(expected.EnableVerboseLogging, actual.EnableVerboseLogging);
+    }
+}
+
+public class ExecutionLogRetentionServiceTests
+{
+    [Fact]
+    public async Task PruneAsync_Removes_Logs_Older_Than_Days_Cutoff()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var job = new BackupJob
+        {
+            Id = Guid.NewGuid(),
+            Name = "Retention Job",
+            SourcePath = "C:\\Source",
+            DestinationPath = "D:\\Destination",
+            Enabled = true,
+            SyncMode = SyncMode.Incremental,
+            ComparisonMethod = ComparisonMethod.Fast,
+            OverwriteBehavior = OverwriteBehavior.AlwaysOverwrite,
+            TriggerType = TriggerType.Manual,
+            CreatedAt = DateTime.UtcNow,
+            ModifiedAt = DateTime.UtcNow
+        };
+
+        context.BackupJobs.Add(job);
+
+        var execution = new JobExecution
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            Status = JobExecutionStatus.Completed,
+            StartTime = DateTime.UtcNow.AddMinutes(-1),
+            EndTime = DateTime.UtcNow,
+            Duration = TimeSpan.FromMinutes(1)
+        };
+
+        context.JobExecutions.Add(execution);
+
+        context.ExecutionLogs.AddRange(
+            new ExecutionLog
+            {
+                Id = Guid.NewGuid(),
+                JobExecutionId = execution.Id,
+                Timestamp = DateTime.UtcNow.AddDays(-10),
+                Level = LogLevel.Warning,
+                Message = "Old warning"
+            },
+            new ExecutionLog
+            {
+                Id = Guid.NewGuid(),
+                JobExecutionId = execution.Id,
+                Timestamp = DateTime.UtcNow.AddDays(-1),
+                Level = LogLevel.Info,
+                Message = "Recent info"
+            });
+
+        await context.SaveChangesAsync();
+
+        var settingsService = new Mock<IArchiveApplicationSettingsService>();
+        settingsService
+            .Setup(x => x.GetAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ArchiveApplicationSettings
+            {
+                LogRetentionValue = 7,
+                LogRetentionUnit = LogRetentionUnit.Days
+            });
+
+        var retentionService = new ExecutionLogRetentionService(context, settingsService.Object);
+        await retentionService.PruneAsync();
+
+        var logs = await context.ExecutionLogs.AsNoTracking().ToListAsync();
+        Assert.Single(logs);
+        Assert.Equal("Recent info", logs[0].Message);
+    }
+
+    [Fact]
+    public async Task PruneAsync_Does_Not_Remove_Logs_When_Retention_Is_Zero()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var job = new BackupJob
+        {
+            Id = Guid.NewGuid(),
+            Name = "Retention Job",
+            SourcePath = "C:\\Source",
+            DestinationPath = "D:\\Destination",
+            Enabled = true,
+            SyncMode = SyncMode.Incremental,
+            ComparisonMethod = ComparisonMethod.Fast,
+            OverwriteBehavior = OverwriteBehavior.AlwaysOverwrite,
+            TriggerType = TriggerType.Manual,
+            CreatedAt = DateTime.UtcNow,
+            ModifiedAt = DateTime.UtcNow
+        };
+
+        context.BackupJobs.Add(job);
+
+        var execution = new JobExecution
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            Status = JobExecutionStatus.Completed,
+            StartTime = DateTime.UtcNow.AddMinutes(-1),
+            EndTime = DateTime.UtcNow,
+            Duration = TimeSpan.FromMinutes(1)
+        };
+
+        context.JobExecutions.Add(execution);
+        context.ExecutionLogs.Add(new ExecutionLog
+        {
+            Id = Guid.NewGuid(),
+            JobExecutionId = execution.Id,
+            Timestamp = DateTime.UtcNow.AddYears(-5),
+            Level = LogLevel.Warning,
+            Message = "Very old warning"
+        });
+
+        await context.SaveChangesAsync();
+
+        var settingsService = new Mock<IArchiveApplicationSettingsService>();
+        settingsService
+            .Setup(x => x.GetAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ArchiveApplicationSettings
+            {
+                LogRetentionValue = 0,
+                LogRetentionUnit = LogRetentionUnit.Months
+            });
+
+        var retentionService = new ExecutionLogRetentionService(context, settingsService.Object);
+        await retentionService.PruneAsync();
+
+        var count = await context.ExecutionLogs.AsNoTracking().CountAsync();
+        Assert.Equal(1, count);
     }
 }

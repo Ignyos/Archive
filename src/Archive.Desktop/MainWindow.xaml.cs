@@ -7,6 +7,8 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using System.Windows.Forms;
 using System.Reflection;
+using System.Media;
+using Archive.Core.Configuration;
 using Archive.Core.Domain.Enums;
 using Archive.Core.Jobs;
 using Archive.Infrastructure.Persistence;
@@ -27,6 +29,7 @@ public partial class MainWindow : Window
     private NotifyIcon? _notifyIcon;
     private ToolStripMenuItem? _trayScheduleToggleMenuItem;
     private ToolStripMenuItem? _trayRunOnStartupMenuItem;
+    private readonly NotificationRateLimiter _notificationRateLimiter = new();
     private bool _isUpdatingScheduleToggleUi;
     private bool _scheduleEnabled = true;
 
@@ -40,6 +43,7 @@ public partial class MainWindow : Window
         DataContext = this;
         InitializeStatusBarText();
         InitializeTrayIcon();
+        JobExecutionNotificationHub.Published += OnJobExecutionNotificationPublished;
         InitializeScheduleToggleState();
         _runtimeRefreshTimer = new DispatcherTimer
         {
@@ -119,7 +123,12 @@ public partial class MainWindow : Window
 
     private void NewJobMenuItem_OnClick(object sender, RoutedEventArgs e)
     {
-        System.Windows.MessageBox.Show("New Job dialog will be implemented in Phase 4.2.", "Archive", MessageBoxButton.OK, MessageBoxImage.Information);
+        var editWindow = new JobEditWindow
+        {
+            Owner = this
+        };
+
+        editWindow.ShowDialog();
         RefreshJobList();
     }
 
@@ -163,6 +172,7 @@ public partial class MainWindow : Window
     private void MainWindow_OnClosed(object? sender, EventArgs e)
     {
         _runtimeRefreshTimer.Stop();
+        JobExecutionNotificationHub.Published -= OnJobExecutionNotificationPublished;
 
         if (_notifyIcon is null)
         {
@@ -686,6 +696,113 @@ public partial class MainWindow : Window
         {
             ShowNotImplementedMessage("Archive", "Unable to update Windows startup registration.");
             _trayRunOnStartupMenuItem.Checked = WindowsStartupRegistrationService.IsEnabled();
+            return;
         }
+
+        PersistRunOnStartupSetting(_trayRunOnStartupMenuItem.Checked);
+    }
+
+    private void PersistRunOnStartupSetting(bool runOnStartup)
+    {
+        try
+        {
+            using var scope = App.Services.CreateScope();
+            var settingsService = scope.ServiceProvider.GetRequiredService<IArchiveApplicationSettingsService>();
+            var current = settingsService.GetAsync().GetAwaiter().GetResult();
+
+            settingsService.SetAsync(new ArchiveApplicationSettings
+            {
+                RunOnWindowsStartup = runOnStartup,
+                EnableNotifications = current.EnableNotifications,
+                NotifyOnStart = current.NotifyOnStart,
+                NotifyOnComplete = current.NotifyOnComplete,
+                NotifyOnFail = current.NotifyOnFail,
+                PlayNotificationSound = current.PlayNotificationSound,
+                LogRetentionValue = current.LogRetentionValue,
+                LogRetentionUnit = current.LogRetentionUnit,
+                EnableVerboseLogging = current.EnableVerboseLogging
+            }).GetAwaiter().GetResult();
+        }
+        catch
+        {
+        }
+    }
+
+    private async void OnJobExecutionNotificationPublished(JobExecutionNotificationEvent notificationEvent)
+    {
+        try
+        {
+            using var scope = App.Services.CreateScope();
+            var settingsService = scope.ServiceProvider.GetRequiredService<IArchiveApplicationSettingsService>();
+            var settings = await settingsService.GetAsync();
+
+            var shouldNotify = NotificationPreferenceResolver.ShouldNotify(settings, notificationEvent);
+
+            if (!shouldNotify)
+            {
+                return;
+            }
+
+            if (!_notificationRateLimiter.ShouldShow(notificationEvent, DateTime.UtcNow))
+            {
+                return;
+            }
+
+            var (title, message, icon) = BuildNotificationPayload(notificationEvent);
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (_notifyIcon is null)
+                {
+                    return;
+                }
+
+                var toastShown = WindowsToastNotificationService.TryShow(title, message, settings.PlayNotificationSound);
+
+                if (!toastShown)
+                {
+                    _notifyIcon.BalloonTipTitle = title;
+                    _notifyIcon.BalloonTipText = message;
+                    _notifyIcon.BalloonTipIcon = icon;
+                    _notifyIcon.ShowBalloonTip(5000);
+
+                    if (settings.PlayNotificationSound)
+                    {
+                        SystemSounds.Asterisk.Play();
+                    }
+                }
+            });
+        }
+        catch
+        {
+        }
+    }
+
+    private static (string Title, string Message, ToolTipIcon Icon) BuildNotificationPayload(JobExecutionNotificationEvent notificationEvent)
+    {
+        return notificationEvent.Kind switch
+        {
+            JobExecutionNotificationKind.Started => (
+                "Archive Job Started",
+                $"{notificationEvent.JobName} started.",
+                ToolTipIcon.Info),
+
+            JobExecutionNotificationKind.Completed => (
+                "Archive Job Completed",
+                $"{notificationEvent.JobName} completed successfully.",
+                ToolTipIcon.Info),
+
+            JobExecutionNotificationKind.Failed => (
+                "Archive Job Requires Attention",
+                string.IsNullOrWhiteSpace(notificationEvent.DetailSummary)
+                    ? $"{notificationEvent.JobName} completed with warnings/errors. Warnings: {notificationEvent.WarningCount}, Errors: {notificationEvent.ErrorCount}, Failed files: {notificationEvent.FilesFailed}."
+                    : $"{notificationEvent.JobName} requires attention. {notificationEvent.DetailSummary}",
+                ToolTipIcon.Warning),
+
+            _ => (
+                "Archive",
+                notificationEvent.JobName,
+                ToolTipIcon.None)
+        };
     }
 }

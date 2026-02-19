@@ -11,11 +11,22 @@ public sealed class JobExecutionService : IJobExecutionService
 {
     private readonly ArchiveDbContext _dbContext;
     private readonly ISyncEngine _syncEngine;
+    private readonly IExecutionLogRetentionService? _retentionService;
 
     public JobExecutionService(ArchiveDbContext dbContext, ISyncEngine syncEngine)
     {
         _dbContext = dbContext;
         _syncEngine = syncEngine;
+    }
+
+    public JobExecutionService(
+        ArchiveDbContext dbContext,
+        ISyncEngine syncEngine,
+        IExecutionLogRetentionService retentionService)
+    {
+        _dbContext = dbContext;
+        _syncEngine = syncEngine;
+        _retentionService = retentionService;
     }
 
     public async Task<JobExecution> ExecuteAsync(Guid jobId, CancellationToken cancellationToken = default)
@@ -28,6 +39,16 @@ public sealed class JobExecutionService : IJobExecutionService
         {
             throw new InvalidOperationException($"BackupJob {jobId} not found.");
         }
+
+        JobExecutionNotificationHub.Publish(new JobExecutionNotificationEvent
+        {
+            JobId = job.Id,
+            JobName = string.IsNullOrWhiteSpace(job.Name) ? "(unnamed)" : job.Name,
+            Kind = JobExecutionNotificationKind.Started,
+            NotifyOnStartOverride = job.NotifyOnStart,
+            NotifyOnCompleteOverride = job.NotifyOnComplete,
+            NotifyOnFailOverride = job.NotifyOnFail
+        });
 
         var execution = new JobExecution
         {
@@ -78,6 +99,95 @@ public sealed class JobExecutionService : IJobExecutionService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        var completionKind = execution.Status is JobExecutionStatus.Failed or JobExecutionStatus.CompletedWithWarnings
+            ? JobExecutionNotificationKind.Failed
+            : JobExecutionNotificationKind.Completed;
+
+        var detailSummary = await BuildDetailSummaryAsync(execution.Id, cancellationToken);
+
+        JobExecutionNotificationHub.Publish(new JobExecutionNotificationEvent
+        {
+            JobId = job.Id,
+            JobName = string.IsNullOrWhiteSpace(job.Name) ? "(unnamed)" : job.Name,
+            Kind = completionKind,
+            Status = execution.Status,
+            WarningCount = execution.WarningCount,
+            ErrorCount = execution.ErrorCount,
+            FilesFailed = execution.FilesFailed,
+            DetailSummary = detailSummary,
+            NotifyOnStartOverride = job.NotifyOnStart,
+            NotifyOnCompleteOverride = job.NotifyOnComplete,
+            NotifyOnFailOverride = job.NotifyOnFail
+        });
+
+        if (_retentionService is not null)
+        {
+            try
+            {
+                await _retentionService.PruneAsync(cancellationToken);
+            }
+            catch
+            {
+            }
+        }
+
         return execution;
+    }
+
+    private async Task<string?> BuildDetailSummaryAsync(Guid executionId, CancellationToken cancellationToken)
+    {
+        var logs = await _dbContext.ExecutionLogs
+            .AsNoTracking()
+            .Where(x => x.JobExecutionId == executionId && (x.Level == LogLevel.Error || x.Level == LogLevel.Warning))
+            .OrderByDescending(x => x.Timestamp)
+            .Select(x => new
+            {
+                x.Level,
+                x.OperationType,
+                x.Message
+            })
+            .ToListAsync(cancellationToken);
+
+        if (logs.Count == 0)
+        {
+            return null;
+        }
+
+        var errorOps = logs
+            .Where(x => x.Level == LogLevel.Error && x.OperationType.HasValue)
+            .Select(x => x.OperationType!.Value.ToString())
+            .Distinct()
+            .ToList();
+
+        var warningOps = logs
+            .Where(x => x.Level == LogLevel.Warning && x.OperationType.HasValue)
+            .Select(x => x.OperationType!.Value.ToString())
+            .Distinct()
+            .ToList();
+
+        var latestMessage = logs
+            .Select(x => x.Message)
+            .FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
+
+        var fragments = new List<string>();
+
+        if (errorOps.Count > 0)
+        {
+            fragments.Add($"Error operations: {string.Join(", ", errorOps)}");
+        }
+
+        if (warningOps.Count > 0)
+        {
+            fragments.Add($"Warning operations: {string.Join(", ", warningOps)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(latestMessage))
+        {
+            fragments.Add($"Latest issue: {latestMessage}");
+        }
+
+        return fragments.Count == 0
+            ? null
+            : string.Join(" | ", fragments);
     }
 }

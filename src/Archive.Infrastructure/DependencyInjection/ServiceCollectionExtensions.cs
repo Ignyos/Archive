@@ -28,6 +28,7 @@ public static class ServiceCollectionExtensions
             options.UseSqlite(connectionString));
 
         services.AddScoped<IJobExecutionService, JobExecutionService>();
+        services.AddScoped<IExecutionLogRetentionService, ExecutionLogRetentionService>();
         services.AddScoped<IJobSchedulerService, JobSchedulerService>();
         services.AddScoped<IBackupJobStateService, BackupJobStateService>();
         services.AddScoped<IArchiveScheduleControlService, ArchiveScheduleControlService>();

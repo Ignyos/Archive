@@ -50,6 +50,15 @@ public partial class App : System.Windows.Application
 			var dbContext = startupScope.ServiceProvider.GetRequiredService<ArchiveDbContext>();
 			dbContext.Database.Migrate();
 
+			try
+			{
+				var retentionService = startupScope.ServiceProvider.GetRequiredService<IExecutionLogRetentionService>();
+				retentionService.PruneAsync().GetAwaiter().GetResult();
+			}
+			catch
+			{
+			}
+
 			var scheduleControlService = startupScope.ServiceProvider.GetRequiredService<IArchiveScheduleControlService>();
 			scheduleControlService.InitializeAsync().GetAwaiter().GetResult();
 		}

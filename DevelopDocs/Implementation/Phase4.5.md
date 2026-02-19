@@ -2,6 +2,14 @@
 
 # Goals/outcomes for the phase (what “done” means).
 
+## Implementation status (2026-02-19)
+
+- Phase 4.5 is complete for the current target.
+- System tray lifecycle/actions, scheduler toggle, startup toggle, and clean shutdown behavior are implemented.
+- Settings persistence is implemented (General/Notifications/Advanced) with auto-save behavior.
+- Notification preference wiring is implemented with global + per-event + per-job override handling.
+- Notification delivery is implemented via tray notifications, with deduplication/rate limiting for stability.
+
 ## Phase4.5 is done when the following have been achieved.
 
 - System tray behavior is fully wired.
