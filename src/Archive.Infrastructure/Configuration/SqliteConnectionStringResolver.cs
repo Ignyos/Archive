@@ -32,6 +32,12 @@ public sealed class SqliteConnectionStringResolver
         }
 
         builder.DataSource = dataSource;
+
+        if (builder.DefaultTimeout <= 0)
+        {
+            builder.DefaultTimeout = 30;
+        }
+
         return builder.ToString();
     }
 }

@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Settings"
+        Icon="Assets/icon.ico"
         Height="640"
         Width="560"
         WindowStartupLocation="CenterOwner"
@@ -84,7 +85,7 @@
                         </StackPanel>
                         <TextBlock Margin="0,6,0,0"
                                    Opacity="0.8"
-                                   Text="Execution logs older than this period will be automatically deleted. Enter 0 to keep logs forever."
+                                   Text="Application and execution logs older than this period will be automatically deleted. Enter 0 to keep logs forever."
                                    TextWrapping="Wrap" />
 
                         <CheckBox x:Name="EnableVerboseLoggingCheckBox"

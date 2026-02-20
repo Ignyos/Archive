@@ -11,6 +11,7 @@ public sealed class JobSchedulerService : IJobSchedulerService
 {
     private readonly IScheduler _scheduler;
     private readonly ArchiveDbContext? _dbContext;
+    private readonly IJobExecutionService? _executionService;
 
     public JobSchedulerService(IScheduler scheduler)
     {
@@ -21,6 +22,16 @@ public sealed class JobSchedulerService : IJobSchedulerService
     {
         _scheduler = scheduler;
         _dbContext = dbContext;
+    }
+
+    public JobSchedulerService(
+        IScheduler scheduler,
+        ArchiveDbContext dbContext,
+        IJobExecutionService executionService)
+    {
+        _scheduler = scheduler;
+        _dbContext = dbContext;
+        _executionService = executionService;
     }
 
     public async Task ScheduleJobAsync(Guid jobId, CancellationToken cancellationToken = default)
@@ -61,23 +72,52 @@ public sealed class JobSchedulerService : IJobSchedulerService
 
     public async Task RunNowAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
-        var jobKey = CreateJobKey(jobId);
-
-        var exists = await _scheduler.CheckExists(jobKey, cancellationToken);
-        if (!exists)
+        if (_executionService is not null)
         {
-            var jobDetail = CreateJobDetail(jobKey, jobId);
-            var trigger = TriggerBuilder.Create()
-                .WithIdentity($"archive-run-now-{jobId}-{Guid.NewGuid():N}")
-                .ForJob(jobKey)
-                .StartNow()
-                .Build();
-
-            await _scheduler.ScheduleJob(jobDetail, trigger, cancellationToken);
+            _ = RunDirectExecutionInBackgroundAsync(jobId);
             return;
         }
 
-        await _scheduler.TriggerJob(jobKey, cancellationToken);
+        try
+        {
+            var jobKey = CreateJobKey(jobId);
+
+            var exists = await _scheduler.CheckExists(jobKey, cancellationToken);
+            if (!exists)
+            {
+                var jobDetail = CreateJobDetail(jobKey, jobId);
+                var trigger = TriggerBuilder.Create()
+                    .WithIdentity($"archive-run-now-{jobId}-{Guid.NewGuid():N}")
+                    .ForJob(jobKey)
+                    .StartNow()
+                    .Build();
+
+                await _scheduler.ScheduleJob(jobDetail, trigger, cancellationToken);
+                return;
+            }
+
+            await _scheduler.TriggerJob(jobKey, cancellationToken);
+        }
+        catch when (_executionService is not null)
+        {
+            _ = RunDirectExecutionInBackgroundAsync(jobId);
+        }
+    }
+
+    private async Task RunDirectExecutionInBackgroundAsync(Guid jobId)
+    {
+        if (_executionService is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _executionService.ExecuteAsync(jobId, CancellationToken.None);
+        }
+        catch
+        {
+        }
     }
 
     public Task<bool> StopAsync(Guid jobId, CancellationToken cancellationToken = default)

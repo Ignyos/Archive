@@ -39,7 +39,7 @@ public sealed class ArchiveApplicationSettingsService : IArchiveApplicationSetti
             NotifyOnComplete = TryGetBool(rows, NotifyOnCompleteKey, defaultValue: true),
             NotifyOnFail = TryGetBool(rows, NotifyOnFailKey, defaultValue: true),
             PlayNotificationSound = TryGetBool(rows, PlayNotificationSoundKey, defaultValue: true),
-            LogRetentionValue = TryGetInt(rows, LogRetentionValueKey, defaultValue: 14),
+            LogRetentionValue = TryGetInt(rows, LogRetentionValueKey, defaultValue: 7),
             LogRetentionUnit = TryGetEnum(rows, LogRetentionUnitKey, defaultValue: LogRetentionUnit.Days),
             EnableVerboseLogging = TryGetBool(rows, EnableVerboseLoggingKey, defaultValue: false)
         };

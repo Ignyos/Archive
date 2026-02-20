@@ -1,9 +1,11 @@
 using Archive.Core.Configuration;
 using Archive.Core.Jobs;
+using Archive.Core.Sync;
 using Archive.Infrastructure.Configuration;
 using Archive.Infrastructure.Jobs;
 using Archive.Infrastructure.Persistence;
 using Archive.Infrastructure.Scheduling;
+using Archive.Infrastructure.Sync;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,6 +30,7 @@ public static class ServiceCollectionExtensions
             options.UseSqlite(connectionString));
 
         services.AddScoped<IJobExecutionService, JobExecutionService>();
+        services.AddScoped<ISyncEngine, FileSystemSyncEngine>();
         services.AddScoped<IExecutionLogRetentionService, ExecutionLogRetentionService>();
         services.AddScoped<IJobSchedulerService, JobSchedulerService>();
         services.AddScoped<IBackupJobStateService, BackupJobStateService>();

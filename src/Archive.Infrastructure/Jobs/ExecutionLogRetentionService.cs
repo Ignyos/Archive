@@ -36,12 +36,26 @@ public sealed class ExecutionLogRetentionService : IExecutionLogRetentionService
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        if (oldLogs.Count == 0)
+        var oldApplicationLogs = await _dbContext.ApplicationLogs
+            .Where(x => x.TimestampUtc < cutoffUtc)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (oldLogs.Count == 0 && oldApplicationLogs.Count == 0)
         {
             return;
         }
 
-        _dbContext.ExecutionLogs.RemoveRange(oldLogs);
+        if (oldLogs.Count > 0)
+        {
+            _dbContext.ExecutionLogs.RemoveRange(oldLogs);
+        }
+
+        if (oldApplicationLogs.Count > 0)
+        {
+            _dbContext.ApplicationLogs.RemoveRange(oldApplicationLogs);
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }

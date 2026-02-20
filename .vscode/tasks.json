@@ -7,7 +7,7 @@
             "command": "powershell",
             "args": [
                 "-Command",
-                "dotnet clean Archive.sln; dotnet build Archive.sln --configuration Debug"
+                "$archiveProcesses = Get-CimInstance Win32_Process | Where-Object { ($_.Name -ieq \"Archive.Desktop.exe\") -or ($_.Name -ieq \"dotnet.exe\" -and $_.CommandLine -like \"*Archive.Desktop.dll*\") }; foreach ($process in $archiveProcesses) { try { Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop } catch { } }; dotnet clean Archive.sln; dotnet build Archive.sln --configuration Debug"
             ],
             "group": "build",
             "presentation": {

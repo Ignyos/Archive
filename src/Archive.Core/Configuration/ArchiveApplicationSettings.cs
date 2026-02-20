@@ -20,7 +20,7 @@ public sealed class ArchiveApplicationSettings
 
     public bool PlayNotificationSound { get; init; } = true;
 
-    public int LogRetentionValue { get; init; } = 14;
+    public int LogRetentionValue { get; init; } = 7;
 
     public LogRetentionUnit LogRetentionUnit { get; init; } = LogRetentionUnit.Days;
 

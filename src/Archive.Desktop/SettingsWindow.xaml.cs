@@ -48,7 +48,7 @@ public partial class SettingsWindow : Window
             NotifyOnCompleteCheckBox.IsChecked = true;
             NotifyOnFailCheckBox.IsChecked = true;
             PlaySoundCheckBox.IsChecked = true;
-            LogRetentionValueTextBox.Text = "14";
+            LogRetentionValueTextBox.Text = "7";
             LogRetentionUnitComboBox.SelectedItem = LogRetentionUnit.Days;
             EnableVerboseLoggingCheckBox.IsChecked = false;
             ApplyNotificationControlState(true);

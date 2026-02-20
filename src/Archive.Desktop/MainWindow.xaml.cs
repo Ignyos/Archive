@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using System.Windows.Forms;
 using System.Reflection;
 using System.Media;
+using System.IO;
 using Archive.Core.Configuration;
 using Archive.Core.Domain.Enums;
 using Archive.Core.Jobs;
@@ -72,12 +73,59 @@ public partial class MainWindow : Window
         _notifyIcon = new NotifyIcon
         {
             Text = "Archive",
-            Icon = System.Drawing.SystemIcons.Application,
+            Icon = LoadArchiveTrayIcon(),
             Visible = true,
             ContextMenuStrip = BuildTrayMenu()
         };
 
         _notifyIcon.DoubleClick += (_, _) => RestoreFromTray();
+        _notifyIcon.MouseClick += TrayIcon_OnMouseClick;
+    }
+
+    private static System.Drawing.Icon LoadArchiveTrayIcon()
+    {
+        try
+        {
+            var entryAssemblyPath = Assembly.GetEntryAssembly()?.Location;
+            if (!string.IsNullOrWhiteSpace(entryAssemblyPath) && File.Exists(entryAssemblyPath))
+            {
+                var extracted = System.Drawing.Icon.ExtractAssociatedIcon(entryAssemblyPath);
+                if (extracted is not null)
+                {
+                    return extracted;
+                }
+            }
+
+            var resourceInfo = System.Windows.Application.GetResourceStream(
+                new Uri("pack://application:,,,/Assets/icon.ico", UriKind.Absolute));
+
+            if (resourceInfo?.Stream is not null)
+            {
+                using var stream = resourceInfo.Stream;
+                return new System.Drawing.Icon(stream);
+            }
+        }
+        catch
+        {
+        }
+
+        var fallbackPath = Path.Combine(AppContext.BaseDirectory, "Assets", "icon.ico");
+        if (File.Exists(fallbackPath))
+        {
+            return new System.Drawing.Icon(fallbackPath);
+        }
+
+        return System.Drawing.SystemIcons.Application;
+    }
+
+    private void TrayIcon_OnMouseClick(object? sender, System.Windows.Forms.MouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Left)
+        {
+            return;
+        }
+
+        RestoreFromTray();
     }
 
     private ContextMenuStrip BuildTrayMenu()
@@ -145,6 +193,16 @@ public partial class MainWindow : Window
         {
             _trayRunOnStartupMenuItem.Checked = WindowsStartupRegistrationService.IsEnabled();
         }
+    }
+
+    private void ViewLogsMenuItem_OnClick(object sender, RoutedEventArgs e)
+    {
+        var logsWindow = new ApplicationLogsWindow
+        {
+            Owner = this
+        };
+
+        logsWindow.ShowDialog();
     }
 
     private void AboutMenuItem_OnClick(object sender, RoutedEventArgs e)
@@ -508,11 +566,15 @@ public partial class MainWindow : Window
             var schedulerService = scope.ServiceProvider.GetRequiredService<IJobSchedulerService>();
             await schedulerService.RunNowAsync(selectedJob.Id);
 
-            ShowNotImplementedMessage("Archive", $"Run Now requested for job: {GetJobName(selectedJob)}");
+            ShowNotImplementedMessage(
+                "Archive",
+                $"Job execution initiated for: {GetJobName(selectedJob)}\n\nYou can close this message and monitor progress in Job History.");
         }
-        catch
+        catch (Exception ex)
         {
-            ShowNotImplementedMessage("Archive", "Unable to run the selected job now. Check logs for details.");
+            ShowNotImplementedMessage(
+                "Archive",
+                $"Unable to run the selected job now. {ex.Message}\n\nOpen File > View Logs for technical details.");
         }
 
         RefreshJobList();

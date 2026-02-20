@@ -364,27 +364,6 @@ public partial class JobEditWindow : Window
         }
     }
 
-    private void BrowseSourceFileButton_OnClick(object sender, RoutedEventArgs e)
-    {
-        var dialog = new Microsoft.Win32.OpenFileDialog
-        {
-            CheckFileExists = true,
-            CheckPathExists = true,
-            Filter = "All files (*.*)|*.*"
-        };
-
-        if (TryGetExistingDirectory(SourcePathTextBox.Text, out var initialDirectory))
-        {
-            dialog.InitialDirectory = initialDirectory;
-        }
-
-        var result = dialog.ShowDialog(this);
-        if (result == true)
-        {
-            SourcePathTextBox.Text = dialog.FileName;
-        }
-    }
-
     private void BrowseDestinationFolderButton_OnClick(object sender, RoutedEventArgs e)
     {
         var selected = PickFolder(DestinationPathTextBox.Text);

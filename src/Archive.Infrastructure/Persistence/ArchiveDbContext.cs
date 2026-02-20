@@ -21,12 +21,17 @@ public sealed class ArchiveDbContext : DbContext
 
     public DbSet<ExecutionLog> ExecutionLogs => Set<ExecutionLog>();
 
+    public DbSet<ApplicationLog> ApplicationLogs => Set<ApplicationLog>();
+
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<AppSetting>()
             .HasKey(x => x.Key);
+
+        modelBuilder.Entity<ApplicationLog>()
+            .HasIndex(x => x.TimestampUtc);
 
         modelBuilder.Entity<BackupJob>()
             .HasMany(x => x.Executions)

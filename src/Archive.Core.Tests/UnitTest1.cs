@@ -519,6 +519,43 @@ public class JobSchedulerServiceTests
     }
 
     [Fact]
+    public async Task RunNowAsync_Falls_Back_To_DirectExecution_When_SchedulerThrows()
+    {
+        var scheduler = new Mock<IScheduler>();
+        scheduler
+            .Setup(x => x.CheckExists(It.IsAny<JobKey>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Scheduler unavailable"));
+
+        var executionService = new Mock<IJobExecutionService>();
+        executionService
+            .Setup(x => x.ExecuteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new JobExecution
+            {
+                Id = Guid.NewGuid(),
+                JobId = Guid.NewGuid(),
+                Status = JobExecutionStatus.Completed,
+                StartTime = DateTime.UtcNow
+            });
+
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var service = new JobSchedulerService(scheduler.Object, context, executionService.Object);
+        var jobId = Guid.NewGuid();
+
+        await service.RunNowAsync(jobId);
+
+        executionService.Verify(x => x.ExecuteAsync(jobId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task ScheduleJobAsync_Registers_Quartz_Job()
     {
         var scheduler = new Mock<IScheduler>();
@@ -672,7 +709,7 @@ public class ArchiveApplicationSettingsServiceTests
         Assert.True(settings.NotifyOnComplete);
         Assert.True(settings.NotifyOnFail);
         Assert.True(settings.PlayNotificationSound);
-        Assert.Equal(14, settings.LogRetentionValue);
+        Assert.Equal(7, settings.LogRetentionValue);
         Assert.Equal(LogRetentionUnit.Days, settings.LogRetentionUnit);
         Assert.False(settings.EnableVerboseLogging);
     }
@@ -783,6 +820,20 @@ public class ExecutionLogRetentionServiceTests
                 Message = "Recent info"
             });
 
+        context.ApplicationLogs.AddRange(
+            new ApplicationLog
+            {
+                TimestampUtc = DateTime.UtcNow.AddDays(-10),
+                Level = "Warning",
+                Message = "Old app warning"
+            },
+            new ApplicationLog
+            {
+                TimestampUtc = DateTime.UtcNow.AddDays(-1),
+                Level = "Information",
+                Message = "Recent app info"
+            });
+
         await context.SaveChangesAsync();
 
         var settingsService = new Mock<IArchiveApplicationSettingsService>();
@@ -800,6 +851,10 @@ public class ExecutionLogRetentionServiceTests
         var logs = await context.ExecutionLogs.AsNoTracking().ToListAsync();
         Assert.Single(logs);
         Assert.Equal("Recent info", logs[0].Message);
+
+        var appLogs = await context.ApplicationLogs.AsNoTracking().ToListAsync();
+        Assert.Single(appLogs);
+        Assert.Equal("Recent app info", appLogs[0].Message);
     }
 
     [Fact]
@@ -852,6 +907,13 @@ public class ExecutionLogRetentionServiceTests
             Message = "Very old warning"
         });
 
+        context.ApplicationLogs.Add(new ApplicationLog
+        {
+            TimestampUtc = DateTime.UtcNow.AddYears(-5),
+            Level = "Error",
+            Message = "Very old app error"
+        });
+
         await context.SaveChangesAsync();
 
         var settingsService = new Mock<IArchiveApplicationSettingsService>();
@@ -868,5 +930,8 @@ public class ExecutionLogRetentionServiceTests
 
         var count = await context.ExecutionLogs.AsNoTracking().CountAsync();
         Assert.Equal(1, count);
+
+        var appLogCount = await context.ApplicationLogs.AsNoTracking().CountAsync();
+        Assert.Equal(1, appLogCount);
     }
 }

@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Archive"
+        Icon="Assets/icon.ico"
         Height="600"
         Width="1000"
         MinHeight="480"
@@ -16,6 +17,7 @@
             <MenuItem Header="_File">
                 <MenuItem Header="_New Job" InputGestureText="Ctrl+N" Click="NewJobMenuItem_OnClick" />
                 <MenuItem Header="_Settings" Click="SettingsMenuItem_OnClick" />
+                <MenuItem Header="View _Logs" Click="ViewLogsMenuItem_OnClick" />
                 <MenuItem Header="_About" Click="AboutMenuItem_OnClick" />
                 <Separator />
                 <MenuItem Header="E_xit" Click="ExitMenuItem_OnClick" />
