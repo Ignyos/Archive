@@ -11,6 +11,7 @@ namespace Archive.Desktop;
 public partial class JobHistoryWindow : Window
 {
     private Guid _jobId;
+    private string _jobName = string.Empty;
     private JobExecutionDetailsWindow? _detailsWindow;
 
     public ObservableCollection<ExecutionHistoryRow> ExecutionItems { get; } = [];
@@ -25,8 +26,8 @@ public partial class JobHistoryWindow : Window
     public void LoadJob(JobListItemViewModel selectedJob)
     {
         _jobId = selectedJob.Id;
-        JobNameTextBlock.Text = selectedJob.Name;
-        Title = $"Job History - {selectedJob.Name}";
+        _jobName = selectedJob.Name;
+        Title = $"Job History - {_jobName}";
         LoadHistory();
     }
 
@@ -83,16 +84,6 @@ public partial class JobHistoryWindow : Window
         }
     }
 
-    private void RefreshButton_OnClick(object sender, RoutedEventArgs e)
-    {
-        LoadHistory();
-    }
-
-    private void OpenDetailsButton_OnClick(object sender, RoutedEventArgs e)
-    {
-        OpenSelectedExecutionDetails();
-    }
-
     private void ExecutionsDataGrid_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         OpenSelectedExecutionDetails();
@@ -131,7 +122,7 @@ public partial class JobHistoryWindow : Window
 
     private void OpenExecutionDetails(Guid executionId)
     {
-        var jobName = JobNameTextBlock.Text;
+        var jobName = _jobName;
 
         if (_detailsWindow is not null)
         {
@@ -148,11 +139,6 @@ public partial class JobHistoryWindow : Window
 
         _detailsWindow.Closed += (_, _) => _detailsWindow = null;
         _detailsWindow.Show();
-    }
-
-    private void CloseButton_OnClick(object sender, RoutedEventArgs e)
-    {
-        Close();
     }
 
     public sealed class ExecutionHistoryRow

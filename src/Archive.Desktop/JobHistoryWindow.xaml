@@ -8,22 +8,10 @@
         WindowStartupLocation="CenterOwner">
     <Grid Margin="16">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock Text="Job History"
-                   FontSize="20"
-                   FontWeight="SemiBold" />
-
-        <StackPanel Grid.Row="1" Margin="0,12,0,0">
-            <TextBlock Text="Selected Job:" FontWeight="SemiBold" />
-            <TextBlock x:Name="JobNameTextBlock" Margin="0,2,0,0" />
-        </StackPanel>
-
-        <Grid Grid.Row="2" Margin="0,16,0,0">
+        <Grid Grid.Row="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -31,7 +19,7 @@
 
             <TextBlock x:Name="EmptyStateTextBlock"
                        Text="No execution history is available for this job yet."
-                       Margin="0,0,0,8"
+                       Margin="0,0,0,0"
                        Visibility="Collapsed" />
 
             <DataGrid Grid.Row="1"
@@ -46,32 +34,32 @@
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Start Time"
                                         Binding="{Binding StartTimeLocal}"
-                                        Width="150" />
+                                        Width="145" />
                     <DataGridTextColumn Header="Status"
                                         Binding="{Binding Status}"
-                                        Width="120" />
+                                        Width="115" />
                     <DataGridTextColumn Header="Duration"
                                         Binding="{Binding DurationText}"
-                                        Width="100" />
+                                        Width="95" />
                     <DataGridTextColumn Header="Scanned"
                                         Binding="{Binding FilesScanned}"
-                                        Width="80" />
+                                        Width="75" />
                     <DataGridTextColumn Header="Copied"
                                         Binding="{Binding FilesCopied}"
-                                        Width="80" />
+                                        Width="75" />
                     <DataGridTextColumn Header="Updated"
                                         Binding="{Binding FilesUpdated}"
-                                        Width="80" />
+                                        Width="75" />
                     <DataGridTextColumn Header="Deleted"
                                         Binding="{Binding FilesDeleted}"
-                                        Width="80" />
+                                        Width="75" />
                     <DataGridTextColumn Header="Failed"
                                         Binding="{Binding FilesFailed}"
-                                        Width="80" />
+                                        Width="75" />
                     <DataGridTextColumn Header="Warnings"
                                         Binding="{Binding WarningCount}"
-                                        Width="80" />
-                    <DataGridTemplateColumn Header="Details" Width="90">
+                                        Width="75" />
+                    <DataGridTemplateColumn Header="Details" Width="*">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock HorizontalAlignment="Center">
@@ -84,21 +72,5 @@
             </DataGrid>
         </Grid>
 
-        <StackPanel Grid.Row="3"
-                    Margin="0,16,0,0"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right">
-            <Button Content="Open Details"
-                Width="104"
-                Margin="0,0,8,0"
-                Click="OpenDetailsButton_OnClick" />
-            <Button Content="Refresh"
-                    Width="88"
-                    Margin="0,0,8,0"
-                    Click="RefreshButton_OnClick" />
-            <Button Content="Close"
-                    Width="88"
-                    Click="CloseButton_OnClick" />
-        </StackPanel>
     </Grid>
 </Window>

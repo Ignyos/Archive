@@ -16,8 +16,8 @@ public partial class JobEditWindow : Window
     private readonly SyncMode _syncMode;
     private readonly ComparisonMethod _comparisonMethod;
     private readonly OverwriteBehavior _overwriteBehavior;
-    private RecurringScheduleMode? _previousRecurringMode;
     private bool _suppressDeleteOrphanedPrompt;
+    private bool _suppressRecurringSync;
 
     public JobEditWindow()
     {
@@ -30,17 +30,16 @@ public partial class JobEditWindow : Window
         _overwriteBehavior = OverwriteBehavior.AlwaysOverwrite;
 
         TriggerTypeComboBox.ItemsSource = Enum.GetValues<TriggerType>();
-        RecurringModeComboBox.ItemsSource = Enum.GetValues<RecurringScheduleMode>();
         SimpleFrequencyComboBox.ItemsSource = Enum.GetValues<SimpleRecurringFrequency>();
         SimpleDayOfWeekComboBox.ItemsSource = Enum.GetValues<DayOfWeek>();
+        InitializeTimePickers();
 
         NameTextBox.Text = string.Empty;
         DescriptionTextBox.Text = string.Empty;
         SourcePathTextBox.Text = string.Empty;
         DestinationPathTextBox.Text = string.Empty;
         TriggerTypeComboBox.SelectedItem = TriggerType.Manual;
-        CronExpressionTextBox.Text = string.Empty;
-        InitializeRecurringMode(null);
+        InitializeRecurringControls(null);
         OneTimeDatePicker.SelectedDate = DateTime.Now.AddDays(1).Date;
         OneTimeTimeTextBox.Text = DateTime.Now.AddHours(1).ToString("HH:mm");
 
@@ -73,13 +72,12 @@ public partial class JobEditWindow : Window
         TriggerTypeComboBox.ItemsSource = Enum.GetValues<TriggerType>();
         TriggerTypeComboBox.SelectedItem = selectedJob.TriggerType;
 
-        RecurringModeComboBox.ItemsSource = Enum.GetValues<RecurringScheduleMode>();
         SimpleFrequencyComboBox.ItemsSource = Enum.GetValues<SimpleRecurringFrequency>();
         SimpleDayOfWeekComboBox.ItemsSource = Enum.GetValues<DayOfWeek>();
+        InitializeTimePickers();
 
         CronExpressionTextBox.Text = selectedJob.CronExpression ?? string.Empty;
-
-        InitializeRecurringMode(selectedJob.CronExpression);
+        InitializeRecurringControls(selectedJob.CronExpression);
 
         var oneTimeLocal = selectedJob.SimpleTriggerTime?.ToLocalTime();
         OneTimeDatePicker.SelectedDate = oneTimeLocal?.Date;
@@ -100,7 +98,13 @@ public partial class JobEditWindow : Window
 
     private void ScheduleInput_OnChanged(object sender, RoutedEventArgs e)
     {
-        SyncAdvancedCronOnModeTransition(sender);
+        SyncRecurringInputs(sender);
+        RefreshSchedulingUi();
+    }
+
+    private void ScheduleInput_OnDropDownClosed(object? sender, EventArgs e)
+    {
+        SyncRecurringInputs(sender ?? this);
         RefreshSchedulingUi();
     }
 
@@ -401,25 +405,17 @@ public partial class JobEditWindow : Window
         if (TriggerTypeComboBox.SelectedItem is not TriggerType triggerType)
         {
             CronRowGrid.Visibility = Visibility.Collapsed;
-            RecurringModeRowGrid.Visibility = Visibility.Collapsed;
             SimpleRecurringRowGrid.Visibility = Visibility.Collapsed;
             OneTimeRowGrid.Visibility = Visibility.Collapsed;
-            SimpleCronPreviewTextBlock.Text = string.Empty;
             SchedulePreviewTextBlock.Text = "Select a trigger type to preview schedule behavior.";
             return;
         }
 
-        var recurringMode = GetRecurringMode();
-
-        RecurringModeRowGrid.Visibility = triggerType == TriggerType.Recurring
+        SimpleRecurringRowGrid.Visibility = triggerType == TriggerType.Recurring
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        SimpleRecurringRowGrid.Visibility = triggerType == TriggerType.Recurring && recurringMode == RecurringScheduleMode.Simple
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-
-        CronRowGrid.Visibility = triggerType == TriggerType.Recurring && recurringMode == RecurringScheduleMode.Advanced
+        CronRowGrid.Visibility = triggerType == TriggerType.Recurring
             ? Visibility.Visible
             : Visibility.Collapsed;
 
@@ -432,17 +428,6 @@ public partial class JobEditWindow : Window
             ? TryBuildRecurringCronForPreview()
             : CronExpressionTextBox.Text;
 
-        if (triggerType == TriggerType.Recurring && recurringMode == RecurringScheduleMode.Simple)
-        {
-            SimpleCronPreviewTextBlock.Text = string.IsNullOrWhiteSpace(cronForPreview)
-                ? "Generated cron: enter valid Simple schedule values."
-                : $"Generated cron: {cronForPreview}";
-        }
-        else
-        {
-            SimpleCronPreviewTextBlock.Text = string.Empty;
-        }
-
         SchedulePreviewTextBlock.Text = SchedulePreviewService.Build(
             triggerType,
             cronForPreview,
@@ -452,6 +437,27 @@ public partial class JobEditWindow : Window
         UpdateSimpleFrequencyVisibility();
     }
 
+    private void InitializeTimePickers()
+    {
+        var timeOptions = BuildTimeOptions();
+        SimpleTimeTextBox.ItemsSource = timeOptions;
+        OneTimeTimeTextBox.ItemsSource = timeOptions;
+    }
+
+    private static List<string> BuildTimeOptions()
+    {
+        var options = new List<string>(96);
+        for (var hour = 0; hour < 24; hour++)
+        {
+            for (var minute = 0; minute < 60; minute += 15)
+            {
+                options.Add($"{hour:00}:{minute:00}");
+            }
+        }
+
+        return options;
+    }
+
     private DateTime? TryGetOneTimeLocalValue()
     {
         if (!OneTimeDatePicker.SelectedDate.HasValue)
@@ -459,7 +465,8 @@ public partial class JobEditWindow : Window
             return null;
         }
 
-        if (!TimeSpan.TryParseExact(OneTimeTimeTextBox.Text.Trim(), "hh\\:mm", null, out var clock))
+        var oneTimeText = GetComboBoxText(OneTimeTimeTextBox);
+        if (!TimeSpan.TryParseExact(oneTimeText, "hh\\:mm", null, out var clock))
         {
             return null;
         }
@@ -467,53 +474,88 @@ public partial class JobEditWindow : Window
         return OneTimeDatePicker.SelectedDate.Value.Date.Add(clock);
     }
 
-    private void InitializeRecurringMode(string? cronExpression)
+    private void InitializeRecurringControls(string? cronExpression)
     {
-        SimpleTimeTextBox.Text = "02:00";
+        _suppressRecurringSync = true;
+        SimpleTimeTextBox.Text = "00:00";
         SimpleDayOfMonthTextBox.Text = "1";
-        SimpleFrequencyComboBox.SelectedItem = SimpleRecurringFrequency.Daily;
-        SimpleDayOfWeekComboBox.SelectedItem = DayOfWeek.Monday;
+        SimpleFrequencyComboBox.SelectedItem = SimpleRecurringFrequency.Weekly;
+        SimpleDayOfWeekComboBox.SelectedItem = DayOfWeek.Sunday;
 
         if (RecurringCronModeService.TryParseSimpleRecurring(cronExpression ?? string.Empty, out var simpleConfig) && simpleConfig is not null)
         {
-            RecurringModeComboBox.SelectedItem = RecurringScheduleMode.Simple;
             SimpleFrequencyComboBox.SelectedItem = simpleConfig.Frequency;
             SimpleDayOfWeekComboBox.SelectedItem = simpleConfig.DayOfWeek;
             SimpleDayOfMonthTextBox.Text = simpleConfig.DayOfMonth.ToString();
             SimpleTimeTextBox.Text = simpleConfig.TimeOfDayText;
-            _previousRecurringMode = GetRecurringMode();
-            return;
         }
-
-        RecurringModeComboBox.SelectedItem = RecurringScheduleMode.Advanced;
-        _previousRecurringMode = GetRecurringMode();
-    }
-
-    private void SyncAdvancedCronOnModeTransition(object sender)
-    {
-        if (!ReferenceEquals(sender, RecurringModeComboBox))
-        {
-            return;
-        }
-
-        var currentMode = GetRecurringMode();
-
-        if (_previousRecurringMode == RecurringScheduleMode.Simple
-            && currentMode == RecurringScheduleMode.Advanced
-            && TryBuildRecurringCronForSimpleMode(out var generatedCron)
+        else if (string.IsNullOrWhiteSpace(cronExpression)
+            && TryBuildRecurringCronFromSimpleControls(out var generatedCron, out _)
             && !string.IsNullOrWhiteSpace(generatedCron))
         {
             CronExpressionTextBox.Text = generatedCron;
         }
 
-        _previousRecurringMode = currentMode;
+        _suppressRecurringSync = false;
     }
 
-    private RecurringScheduleMode GetRecurringMode()
+    private void SyncRecurringInputs(object sender)
     {
-        return RecurringModeComboBox.SelectedItem is RecurringScheduleMode mode
-            ? mode
-            : RecurringScheduleMode.Advanced;
+        if (_suppressRecurringSync)
+        {
+            return;
+        }
+
+        if (TriggerTypeComboBox.SelectedItem is not TriggerType.Recurring)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(sender, CronExpressionTextBox))
+        {
+            SyncSimpleControlsFromCronText();
+            return;
+        }
+
+        if (IsSimpleRecurringControl(sender))
+        {
+            SyncCronTextFromSimpleControls();
+        }
+    }
+
+    private static bool IsSimpleRecurringControl(object sender)
+    {
+        return sender is System.Windows.Controls.ComboBox or System.Windows.Controls.TextBox;
+    }
+
+    private void SyncSimpleControlsFromCronText()
+    {
+        var cron = CronExpressionTextBox.Text.Trim();
+        if (!RecurringCronModeService.TryParseSimpleRecurring(cron, out var config) || config is null)
+        {
+            return;
+        }
+
+        _suppressRecurringSync = true;
+        SimpleFrequencyComboBox.SelectedItem = config.Frequency;
+        SimpleDayOfWeekComboBox.SelectedItem = config.DayOfWeek;
+        SimpleDayOfMonthTextBox.Text = config.DayOfMonth.ToString();
+        SimpleTimeTextBox.Text = config.TimeOfDayText;
+        _suppressRecurringSync = false;
+    }
+
+    private void SyncCronTextFromSimpleControls()
+    {
+        if (!TryBuildRecurringCronFromSimpleControls(out var cronExpression, out _)
+            || string.IsNullOrWhiteSpace(cronExpression)
+            || string.Equals(CronExpressionTextBox.Text.Trim(), cronExpression, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _suppressRecurringSync = true;
+        CronExpressionTextBox.Text = cronExpression;
+        _suppressRecurringSync = false;
     }
 
     private bool TryBuildRecurringCron(out string? cronExpression, out string error)
@@ -521,34 +563,44 @@ public partial class JobEditWindow : Window
         cronExpression = null;
         error = "";
 
-        if (GetRecurringMode() == RecurringScheduleMode.Advanced)
+        var cron = CronExpressionTextBox.Text.Trim();
+        if (!string.IsNullOrWhiteSpace(cron))
         {
-            var cron = CronExpressionTextBox.Text.Trim();
-            if (string.IsNullOrWhiteSpace(cron))
-            {
-                error = "Cron expression is required for recurring schedules.";
-                return false;
-            }
-
             cronExpression = cron;
             return true;
         }
+
+        if (TryBuildRecurringCronFromSimpleControls(out var generatedCron, out error)
+            && !string.IsNullOrWhiteSpace(generatedCron))
+        {
+            cronExpression = generatedCron;
+            return true;
+        }
+
+        error = "Cron expression is required for recurring schedules.";
+        return false;
+    }
+
+    private bool TryBuildRecurringCronFromSimpleControls(out string? cronExpression, out string error)
+    {
+        cronExpression = null;
+        error = "";
 
         try
         {
             if (SimpleFrequencyComboBox.SelectedItem is not SimpleRecurringFrequency frequency)
             {
-                error = "Simple schedule frequency is required.";
+                error = "Recurring frequency is required.";
                 return false;
             }
 
             cronExpression = frequency switch
             {
-                SimpleRecurringFrequency.Daily => RecurringCronModeService.BuildDailyCron(SimpleTimeTextBox.Text),
+                SimpleRecurringFrequency.Daily => RecurringCronModeService.BuildDailyCron(GetComboBoxText(SimpleTimeTextBox)),
                 SimpleRecurringFrequency.Weekly when SimpleDayOfWeekComboBox.SelectedItem is DayOfWeek dayOfWeek
-                    => RecurringCronModeService.BuildWeeklyCron(dayOfWeek, SimpleTimeTextBox.Text),
+                    => RecurringCronModeService.BuildWeeklyCron(dayOfWeek, GetComboBoxText(SimpleTimeTextBox)),
                 SimpleRecurringFrequency.Monthly when int.TryParse(SimpleDayOfMonthTextBox.Text.Trim(), out var dayOfMonth)
-                    => RecurringCronModeService.BuildMonthlyCron(dayOfMonth, SimpleTimeTextBox.Text),
+                    => RecurringCronModeService.BuildMonthlyCron(dayOfMonth, GetComboBoxText(SimpleTimeTextBox)),
                 SimpleRecurringFrequency.Weekly => throw new FormatException("Select a weekday for weekly frequency."),
                 _ => throw new FormatException("Enter a valid month day (1-31) for monthly frequency.")
             };
@@ -569,19 +621,6 @@ public partial class JobEditWindow : Window
             : null;
     }
 
-    private bool TryBuildRecurringCronForSimpleMode(out string? cronExpression)
-    {
-        cronExpression = null;
-
-        var originalMode = GetRecurringMode();
-        if (originalMode != RecurringScheduleMode.Simple)
-        {
-            return false;
-        }
-
-        return TryBuildRecurringCron(out cronExpression, out _);
-    }
-
     private void UpdateSimpleFrequencyVisibility()
     {
         if (SimpleFrequencyComboBox.SelectedItem is not SimpleRecurringFrequency frequency)
@@ -593,6 +632,16 @@ public partial class JobEditWindow : Window
 
         SimpleDayOfWeekComboBox.IsEnabled = frequency == SimpleRecurringFrequency.Weekly;
         SimpleDayOfMonthTextBox.IsEnabled = frequency == SimpleRecurringFrequency.Monthly;
+    }
+
+    private static string GetComboBoxText(System.Windows.Controls.ComboBox comboBox)
+    {
+        if (comboBox.SelectedItem is string selected)
+        {
+            return selected.Trim();
+        }
+
+        return comboBox.Text.Trim();
     }
 
     private static string? PickFolder(string currentPath)

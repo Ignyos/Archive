@@ -21,7 +21,6 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -116,29 +115,13 @@
             <ComboBox Grid.Column="1" x:Name="TriggerTypeComboBox" SelectionChanged="ScheduleInput_OnChanged" />
         </Grid>
 
-        <Grid Grid.Row="7" Margin="0,12,0,0" x:Name="RecurringModeRowGrid">
+        <Grid Grid.Row="7" Margin="0,12,0,0" x:Name="SimpleRecurringRowGrid">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <TextBlock VerticalAlignment="Center" Text="Recurring Mode" />
-            <StackPanel Grid.Column="1">
-                <ComboBox x:Name="RecurringModeComboBox"
-                          SelectionChanged="ScheduleInput_OnChanged" />
-                <TextBlock Margin="0,6,0,0"
-                           Opacity="0.8"
-                           Text="Switching to Advanced keeps the generated cron so you can fine-tune it." />
-            </StackPanel>
-        </Grid>
-
-        <Grid Grid.Row="8" Margin="0,12,0,0" x:Name="SimpleRecurringRowGrid">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="110" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-
-            <TextBlock VerticalAlignment="Top" Margin="0,4,0,0" Text="Simple" />
+            <TextBlock VerticalAlignment="Top" Margin="0,4,0,0" Text="Recurring" />
             <StackPanel Grid.Column="1">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock VerticalAlignment="Center" Text="Frequency" />
@@ -147,11 +130,15 @@
                               Margin="8,0,0,0"
                               SelectionChanged="ScheduleInput_OnChanged" />
                     <TextBlock VerticalAlignment="Center" Margin="12,0,0,0" Text="Time" />
-                    <TextBox x:Name="SimpleTimeTextBox"
-                             Width="70"
-                             Margin="8,0,0,0"
-                             ToolTip="HH:mm"
-                             TextChanged="ScheduleInput_OnChanged" />
+                    <ComboBox x:Name="SimpleTimeTextBox"
+                              Width="84"
+                              Margin="8,0,0,0"
+                              IsEditable="True"
+                              IsTextSearchEnabled="False"
+                              ToolTip="HH:mm"
+                              SelectionChanged="ScheduleInput_OnChanged"
+                              DropDownClosed="ScheduleInput_OnDropDownClosed"
+                              LostFocus="ScheduleInput_OnChanged" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                     <TextBlock VerticalAlignment="Center" Text="Weekday" />
@@ -165,13 +152,10 @@
                              Margin="8,0,0,0"
                              TextChanged="ScheduleInput_OnChanged" />
                 </StackPanel>
-                <TextBlock x:Name="SimpleCronPreviewTextBlock"
-                           Margin="0,8,0,0"
-                           TextWrapping="Wrap" />
             </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="9" Margin="0,12,0,0" x:Name="CronRowGrid">
+        <Grid Grid.Row="8" Margin="0,12,0,0" x:Name="CronRowGrid">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
@@ -181,7 +165,7 @@
             <TextBox Grid.Column="1" x:Name="CronExpressionTextBox" TextChanged="ScheduleInput_OnChanged" />
         </Grid>
 
-        <Grid Grid.Row="10" Margin="0,12,0,0" x:Name="OneTimeRowGrid">
+        <Grid Grid.Row="9" Margin="0,12,0,0" x:Name="OneTimeRowGrid">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
@@ -190,15 +174,19 @@
             <TextBlock VerticalAlignment="Top" Margin="0,4,0,0" Text="One-Time" />
             <StackPanel Grid.Column="1" Orientation="Horizontal">
                 <DatePicker x:Name="OneTimeDatePicker" Width="150" SelectedDateChanged="ScheduleInput_OnChanged" />
-                <TextBox x:Name="OneTimeTimeTextBox"
-                         Width="80"
-                         Margin="8,0,0,0"
-                         ToolTip="HH:mm"
-                         TextChanged="ScheduleInput_OnChanged" />
+                <ComboBox x:Name="OneTimeTimeTextBox"
+                          Width="84"
+                          Margin="8,0,0,0"
+                          IsEditable="True"
+                          IsTextSearchEnabled="False"
+                          ToolTip="HH:mm"
+                          SelectionChanged="ScheduleInput_OnChanged"
+                          DropDownClosed="ScheduleInput_OnDropDownClosed"
+                          LostFocus="ScheduleInput_OnChanged" />
             </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="11" Margin="0,12,0,0">
+        <Grid Grid.Row="10" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
@@ -208,7 +196,7 @@
             <CheckBox Grid.Column="1" x:Name="EnabledCheckBox" VerticalAlignment="Center" />
         </Grid>
 
-        <Border Grid.Row="12"
+        <Border Grid.Row="11"
                 Margin="0,12,0,0"
             Padding="8">
             <TextBlock x:Name="SchedulePreviewTextBlock"
@@ -216,13 +204,13 @@
                        TextWrapping="Wrap" />
         </Border>
 
-        <TextBlock Grid.Row="13"
+        <TextBlock Grid.Row="12"
                    Margin="0,16,0,0"
                    Foreground="Red"
                    Text=""
                    x:Name="ValidationTextBlock" />
 
-        <StackPanel Grid.Row="14"
+        <StackPanel Grid.Row="13"
                     Margin="0,16,0,0"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right">
