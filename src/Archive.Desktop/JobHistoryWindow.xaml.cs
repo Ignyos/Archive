@@ -15,13 +15,10 @@ public partial class JobHistoryWindow : Window
 
     public ObservableCollection<ExecutionHistoryRow> ExecutionItems { get; } = [];
 
-    public ObservableCollection<ExecutionLogRow> ExecutionLogItems { get; } = [];
-
     public JobHistoryWindow(JobListItemViewModel selectedJob)
     {
         InitializeComponent();
         ExecutionsDataGrid.ItemsSource = ExecutionItems;
-        ExecutionLogsDataGrid.ItemsSource = ExecutionLogItems;
         LoadJob(selectedJob);
     }
 
@@ -36,10 +33,6 @@ public partial class JobHistoryWindow : Window
     private void LoadHistory()
     {
         ExecutionItems.Clear();
-        ExecutionLogItems.Clear();
-
-        SelectedExecutionSummaryTextBlock.Text = "Select an execution above to inspect details.";
-        SelectedExecutionCountersTextBlock.Text = string.Empty;
 
         try
         {
@@ -90,58 +83,6 @@ public partial class JobHistoryWindow : Window
         }
     }
 
-    private void ExecutionsDataGrid_OnSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-    {
-        if (ExecutionsDataGrid.SelectedItem is not ExecutionHistoryRow selected)
-        {
-            ExecutionLogItems.Clear();
-            SelectedExecutionSummaryTextBlock.Text = "Select an execution above to inspect details.";
-            SelectedExecutionCountersTextBlock.Text = string.Empty;
-            return;
-        }
-
-        SelectedExecutionSummaryTextBlock.Text =
-            $"Status: {selected.Status}  |  Start: {selected.StartTimeLocal}  |  End: {selected.EndTimeLocal}  |  Duration: {selected.DurationText}";
-
-        SelectedExecutionCountersTextBlock.Text =
-            $"Scanned: {selected.FilesScanned}  Copied: {selected.FilesCopied}  Updated: {selected.FilesUpdated}  Deleted: {selected.FilesDeleted}  Skipped: {selected.FilesSkipped}  Failed: {selected.FilesFailed}  Warnings: {selected.WarningCount}  Errors: {selected.ErrorCount}  Bytes: {selected.BytesTransferred:N0}";
-
-        LoadExecutionLogs(selected.Id);
-    }
-
-    private void LoadExecutionLogs(Guid executionId)
-    {
-        ExecutionLogItems.Clear();
-
-        try
-        {
-            using var scope = App.Services.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<ArchiveDbContext>();
-
-            var logs = dbContext.ExecutionLogs
-                .AsNoTracking()
-                .Where(x => x.JobExecutionId == executionId)
-                .OrderByDescending(x => x.Timestamp)
-                .Select(x => new ExecutionLogRow
-                {
-                    TimestampLocal = x.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
-                    Level = x.Level.ToString(),
-                    OperationType = x.OperationType.HasValue ? x.OperationType.Value.ToString() : string.Empty,
-                    FilePath = x.FilePath ?? string.Empty,
-                    Message = x.Message
-                })
-                .ToList();
-
-            foreach (var log in logs)
-            {
-                ExecutionLogItems.Add(log);
-            }
-        }
-        catch
-        {
-        }
-    }
-
     private void RefreshButton_OnClick(object sender, RoutedEventArgs e)
     {
         LoadHistory();
@@ -157,6 +98,27 @@ public partial class JobHistoryWindow : Window
         OpenSelectedExecutionDetails();
     }
 
+    private void ExecutionsDataGrid_OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        OpenSelectedExecutionDetails();
+    }
+
+    private void ViewDetailsHyperlink_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkContentElement element || element.DataContext is not ExecutionHistoryRow row)
+        {
+            return;
+        }
+
+        OpenExecutionDetails(row.Id);
+    }
+
     private void OpenSelectedExecutionDetails()
     {
         if (ExecutionsDataGrid.SelectedItem is not ExecutionHistoryRow selected)
@@ -164,15 +126,22 @@ public partial class JobHistoryWindow : Window
             return;
         }
 
+        OpenExecutionDetails(selected.Id);
+    }
+
+    private void OpenExecutionDetails(Guid executionId)
+    {
+        var jobName = JobNameTextBlock.Text;
+
         if (_detailsWindow is not null)
         {
-            _detailsWindow.LoadExecution(selected.Id, JobNameTextBlock.Text);
+            _detailsWindow.LoadExecution(executionId, jobName);
             _detailsWindow.Show();
             _detailsWindow.Activate();
             return;
         }
 
-        _detailsWindow = new JobExecutionDetailsWindow(selected.Id, JobNameTextBlock.Text)
+        _detailsWindow = new JobExecutionDetailsWindow(executionId, jobName)
         {
             Owner = this
         };
@@ -223,18 +192,5 @@ public partial class JobHistoryWindow : Window
         public int ErrorCount { get; init; }
 
         public long BytesTransferred { get; init; }
-    }
-
-    public sealed class ExecutionLogRow
-    {
-        public string TimestampLocal { get; init; } = string.Empty;
-
-        public string Level { get; init; } = string.Empty;
-
-        public string OperationType { get; init; } = string.Empty;
-
-        public string FilePath { get; init; } = string.Empty;
-
-        public string Message { get; init; } = string.Empty;
     }
 }
