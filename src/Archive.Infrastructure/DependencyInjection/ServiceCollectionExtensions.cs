@@ -39,10 +39,11 @@ public static class ServiceCollectionExtensions
 
         services.AddQuartz(q =>
         {
+            q.SetProperty("quartz.serializer.type", "json");
+
             q.UsePersistentStore(storeOptions =>
             {
                 storeOptions.UseProperties = true;
-                storeOptions.UseBinarySerializer();
                 storeOptions.UseMicrosoftSQLite(connectionString);
             });
         });

@@ -93,6 +93,55 @@ public sealed class JobPreviewServiceTests
         }
     }
 
+    [Fact]
+    public void BuildPreview_SkipsProtectedSystemDirectories()
+    {
+        var sourceRoot = CreateTempDirectory();
+        var destinationRoot = CreateTempDirectory();
+
+        try
+        {
+            File.WriteAllText(Path.Combine(sourceRoot, "keep.txt"), "keep");
+
+            var protectedDirectory = Path.Combine(sourceRoot, "System Volume Information");
+            Directory.CreateDirectory(protectedDirectory);
+            File.WriteAllText(Path.Combine(protectedDirectory, "hidden.txt"), "hidden");
+
+            var now = DateTime.UtcNow;
+            var job = new BackupJob
+            {
+                Id = Guid.NewGuid(),
+                Name = "Preview",
+                SourcePath = sourceRoot,
+                DestinationPath = destinationRoot,
+                SyncMode = SyncMode.Incremental,
+                ComparisonMethod = ComparisonMethod.Fast,
+                OverwriteBehavior = OverwriteBehavior.AlwaysOverwrite,
+                SyncOptions = new SyncOptions
+                {
+                    Recursive = true,
+                    SkipHiddenAndSystem = false
+                },
+                TriggerType = TriggerType.Manual,
+                Enabled = true,
+                CreatedAt = now,
+                ModifiedAt = now
+            };
+
+            var result = JobPreviewService.BuildPreview(job);
+
+            Assert.Equal(1, result.FilesToAdd);
+            Assert.Equal(0, result.FilesToUpdate);
+            Assert.Equal(0, result.FilesToDelete);
+            Assert.Equal(0, result.FilesUnchanged);
+        }
+        finally
+        {
+            Directory.Delete(sourceRoot, recursive: true);
+            Directory.Delete(destinationRoot, recursive: true);
+        }
+    }
+
     private static string CreateTempDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), "ArchiveTests", Guid.NewGuid().ToString("N"));

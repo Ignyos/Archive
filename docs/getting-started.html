@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Archive Getting Started</title>
+  <meta name="description" content="Install Archive and create your first backup job." />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container nav-wrap">
+      <div class="brand">Archive</div>
+      <nav class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html" aria-current="page">Getting Started</a>
+        <a href="downloads.html">Downloads</a>
+        <a href="troubleshooting.html">Troubleshooting</a>
+        <a href="changelog.html">Changelog</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="panel">
+      <h1 class="page-title">Getting Started</h1>
+      <p class="lead">Install Archive, configure your first job, and validate results safely.</p>
+    </section>
+
+    <section class="panel">
+      <h2>1) Install Archive</h2>
+      <ul>
+        <li>Download from: <a href="https://github.com/Ignyos/Archive/releases/latest">https://github.com/Ignyos/Archive/releases/latest</a></li>
+        <li>Run <code>ArchiveSetup.exe</code></li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>2) Create your first job</h2>
+      <ol>
+        <li>Open Archive.</li>
+        <li>Select <strong>New Job</strong>.</li>
+        <li>Enter a job name.</li>
+        <li>Pick a source path (file or folder).</li>
+        <li>Pick a destination folder.</li>
+        <li>Choose schedule type (Manual, One-time, or Recurring).</li>
+        <li>Save.</li>
+      </ol>
+    </section>
+
+    <section class="panel">
+      <h2>3) Preview operations</h2>
+      <p>Use <strong>Preview Operations</strong> before running a job.</p>
+      <ul>
+        <li>Preview uses your configured sync options.</li>
+        <li>Protected Windows system folders may be skipped automatically.</li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>4) Run and verify</h2>
+      <ul>
+        <li>Run the job manually from the app.</li>
+        <li>Confirm copied/updated files at destination.</li>
+        <li>Review execution history/logs in the app.</li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>Tips</h2>
+      <ul>
+        <li>Avoid using a whole drive root (like <code>E:\</code>) as source when possible.</li>
+        <li>Prefer a specific top-level folder to reduce permission-related skips.</li>
+        <li>Keep destination outside source to avoid recursive copy behavior.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="container site-footer">
+    Next step: verify your release and install path from the downloads page.
+  </footer>
+</body>
+</html>

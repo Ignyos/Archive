@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Archive Troubleshooting</title>
+  <meta name="description" content="Common Archive issues and recommended fixes." />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container nav-wrap">
+      <div class="brand">Archive</div>
+      <nav class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting Started</a>
+        <a href="downloads.html">Downloads</a>
+        <a href="troubleshooting.html" aria-current="page">Troubleshooting</a>
+        <a href="changelog.html">Changelog</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="panel">
+      <h1 class="page-title">Troubleshooting</h1>
+      <p class="lead">Common issues and fixes for setup, launch, and preview workflows.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Preview shows access denied</h2>
+      <p>Example:</p>
+      <blockquote>Unable to generate preview: Access to the path 'E:\System Volume Information' is denied.</blockquote>
+
+      <p>Why this happens:</p>
+      <ul>
+        <li><code>System Volume Information</code> is a Windows-protected folder.</li>
+        <li>Access can be denied even when the drive appears writable.</li>
+      </ul>
+
+      <p>What to do:</p>
+      <ul>
+        <li>Use a specific source folder instead of the drive root.</li>
+        <li>Keep <strong>Skip hidden and system files</strong> enabled when possible.</li>
+        <li>Re-run preview.</li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>App does not start after build</h2>
+      <ul>
+        <li>Use the VS Code launch profile <strong>Run Archive (Clean &amp; Build)</strong>.</li>
+        <li>Confirm build succeeds.</li>
+        <li>If needed, close any old running <code>Archive.Desktop.exe</code> process and retry.</li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>Quartz scheduler serializer error</h2>
+      <p>If you see a startup error about <code>quartz.serializer.type</code> or JSON serializer instantiation:</p>
+      <ul>
+        <li>Update to latest release.</li>
+        <li>Ensure installation files come from official releases.</li>
+        <li>If building from source, restore and rebuild dependencies.</li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>Reporting an issue</h2>
+      <p>Open an issue with:</p>
+      <ol>
+        <li>Archive version</li>
+        <li>Windows version</li>
+        <li>Steps to reproduce</li>
+        <li>Full error message</li>
+      </ol>
+    </section>
+  </main>
+
+  <footer class="container site-footer">
+    Include exact error text in issue reports to speed up diagnosis.
+  </footer>
+</body>
+</html>

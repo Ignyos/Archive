@@ -237,7 +237,7 @@ public partial class JobEditWindow : Window
             DialogResult = true;
             Close();
         }
-        catch
+        catch(Exception ex)
         {
             ValidationTextBlock.Text = "Unable to save changes. Check logs for details.";
         }

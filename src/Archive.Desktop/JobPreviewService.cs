@@ -94,11 +94,22 @@ public static class JobPreviewService
         }
 
         var recursive = job.SyncOptions?.Recursive ?? true;
-        var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-
-        foreach (var file in Directory.EnumerateFiles(job.SourcePath, "*", searchOption))
+        foreach (var file in EnumerateFilesSafe(job.SourcePath, recursive))
         {
-            var fileInfo = new FileInfo(file);
+            FileInfo fileInfo;
+            try
+            {
+                fileInfo = new FileInfo(file);
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                continue;
+            }
+
             var relativePath = Path.GetRelativePath(job.SourcePath, fileInfo.FullName);
             yield return (
                 relativePath,
@@ -129,15 +140,110 @@ public static class JobPreviewService
         }
 
         var recursive = job.SyncOptions?.Recursive ?? true;
-        var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
-        foreach (var file in Directory.EnumerateFiles(job.DestinationPath, "*", searchOption))
+        foreach (var file in EnumerateFilesSafe(job.DestinationPath, recursive))
         {
             var relativePath = Path.GetRelativePath(job.DestinationPath, file);
             lookup[relativePath] = file;
         }
 
         return lookup;
+    }
+
+    private static IEnumerable<string> EnumerateFilesSafe(string rootPath, bool recursive)
+    {
+        if (!recursive)
+        {
+            IEnumerator<string>? topLevelFiles = null;
+            try
+            {
+                topLevelFiles = Directory.EnumerateFiles(rootPath, "*", SearchOption.TopDirectoryOnly).GetEnumerator();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                yield break;
+            }
+            catch (IOException)
+            {
+                yield break;
+            }
+
+            using (topLevelFiles)
+            {
+                while (topLevelFiles.MoveNext())
+                {
+                    yield return topLevelFiles.Current;
+                }
+            }
+
+            yield break;
+        }
+
+        var directories = new Stack<string>();
+        directories.Push(rootPath);
+
+        while (directories.Count > 0)
+        {
+            var currentDirectory = directories.Pop();
+
+            IEnumerator<string>? files = null;
+            try
+            {
+                files = Directory.EnumerateFiles(currentDirectory, "*", SearchOption.TopDirectoryOnly).GetEnumerator();
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+            catch (IOException)
+            {
+            }
+
+            if (files is not null)
+            {
+                using (files)
+                {
+                    while (files.MoveNext())
+                    {
+                        yield return files.Current;
+                    }
+                }
+            }
+
+            IEnumerator<string>? childDirectories = null;
+            try
+            {
+                childDirectories = Directory.EnumerateDirectories(currentDirectory, "*", SearchOption.TopDirectoryOnly).GetEnumerator();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                continue;
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+
+            using (childDirectories)
+            {
+                while (childDirectories.MoveNext())
+                {
+                    var childDirectory = childDirectories.Current;
+                    if (IsProtectedSystemDirectory(childDirectory))
+                    {
+                        continue;
+                    }
+
+                    directories.Push(childDirectory);
+                }
+            }
+        }
+    }
+
+    private static bool IsProtectedSystemDirectory(string fullPath)
+    {
+        var name = Path.GetFileName(fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        return name.Equals("System Volume Information", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("$RECYCLE.BIN", StringComparison.OrdinalIgnoreCase);
     }
 
     private static FileSnapshot BuildSnapshot(string fullPath)

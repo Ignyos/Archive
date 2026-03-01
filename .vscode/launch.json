@@ -6,9 +6,8 @@
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "clean-build",
-            "program": "${workspaceFolder}/src/Archive.Desktop/bin/Debug/net9.0-windows/Archive.Desktop.dll",
-            "args": [],
-            "cwd": "${workspaceFolder}/src/Archive.Desktop",
+            "program": "${workspaceFolder}/src/Archive.Desktop/bin/Debug/net9.0-windows/Archive.Desktop.exe",
+            "cwd": "${workspaceFolder}/src/Archive.Desktop/bin/Debug/net9.0-windows",
             "stopAtEntry": false,
             "console": "internalConsole"
         },
