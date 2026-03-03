@@ -1,4 +1,5 @@
 using Archive.Core.Domain.Entities;
+using Archive.Core.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace Archive.Infrastructure.Persistence;
@@ -21,6 +22,12 @@ public sealed class ArchiveDbContext : DbContext
 
     public DbSet<ExecutionLog> ExecutionLogs => Set<ExecutionLog>();
 
+    public DbSet<CredentialProfile> CredentialProfiles => Set<CredentialProfile>();
+
+    public DbSet<AzureSqlBackupJob> AzureSqlBackupJobs => Set<AzureSqlBackupJob>();
+
+    public DbSet<AzureSqlBackupDestination> AzureSqlBackupDestinations => Set<AzureSqlBackupDestination>();
+
     public DbSet<ApplicationLog> ApplicationLogs => Set<ApplicationLog>();
 
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
@@ -33,10 +40,33 @@ public sealed class ArchiveDbContext : DbContext
         modelBuilder.Entity<ApplicationLog>()
             .HasIndex(x => x.TimestampUtc);
 
+        modelBuilder.Entity<CredentialProfile>()
+            .HasIndex(x => new { x.ProviderType, x.Name })
+            .IsUnique();
+
         modelBuilder.Entity<BackupJob>()
             .HasMany(x => x.Executions)
             .WithOne(x => x.Job)
             .HasForeignKey(x => x.JobId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<BackupJob>()
+            .Property(x => x.JobType)
+            .HasDefaultValue(JobType.DirectorySync);
+
+        modelBuilder.Entity<AzureSqlBackupJob>()
+            .HasKey(x => x.JobId);
+
+        modelBuilder.Entity<BackupJob>()
+            .HasOne(x => x.AzureSqlBackupJob)
+            .WithOne(x => x.Job)
+            .HasForeignKey<AzureSqlBackupJob>(x => x.JobId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<AzureSqlBackupDestination>()
+            .HasOne(x => x.AzureSqlBackupJob)
+            .WithMany(x => x.Destinations)
+            .HasForeignKey(x => x.AzureSqlBackupJobId)
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<JobExecution>()

@@ -11,12 +11,14 @@ public sealed class JobExecutionService : IJobExecutionService
 {
     private readonly ArchiveDbContext _dbContext;
     private readonly ISyncEngine _syncEngine;
+    private readonly IAzureSqlBackupExecutor _azureSqlBackupExecutor;
     private readonly IExecutionLogRetentionService? _retentionService;
 
     public JobExecutionService(ArchiveDbContext dbContext, ISyncEngine syncEngine)
     {
         _dbContext = dbContext;
         _syncEngine = syncEngine;
+        _azureSqlBackupExecutor = new UnsupportedAzureSqlBackupExecutor();
     }
 
     public JobExecutionService(
@@ -26,6 +28,19 @@ public sealed class JobExecutionService : IJobExecutionService
     {
         _dbContext = dbContext;
         _syncEngine = syncEngine;
+        _azureSqlBackupExecutor = new UnsupportedAzureSqlBackupExecutor();
+        _retentionService = retentionService;
+    }
+
+    public JobExecutionService(
+        ArchiveDbContext dbContext,
+        ISyncEngine syncEngine,
+        IAzureSqlBackupExecutor azureSqlBackupExecutor,
+        IExecutionLogRetentionService retentionService)
+    {
+        _dbContext = dbContext;
+        _syncEngine = syncEngine;
+        _azureSqlBackupExecutor = azureSqlBackupExecutor;
         _retentionService = retentionService;
     }
 
@@ -33,6 +48,8 @@ public sealed class JobExecutionService : IJobExecutionService
     {
         var job = await _dbContext.BackupJobs
             .Include(x => x.SyncOptions)
+            .Include(x => x.AzureSqlBackupJob)
+                .ThenInclude(x => x!.Destinations)
             .FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
 
         if (job is null)
@@ -60,7 +77,7 @@ public sealed class JobExecutionService : IJobExecutionService
 
         try
         {
-            var result = await _syncEngine.ExecuteAsync(job, cancellationToken);
+            var result = await ExecuteByJobTypeAsync(job, cancellationToken);
 
             execution.Status = result.WarningCount > 0 || result.ErrorCount > 0 || result.FilesFailed > 0
                 ? JobExecutionStatus.CompletedWithWarnings
@@ -132,6 +149,37 @@ public sealed class JobExecutionService : IJobExecutionService
         }
 
         return execution;
+    }
+
+    private Task<SyncResult> ExecuteByJobTypeAsync(BackupJob job, CancellationToken cancellationToken)
+    {
+        return job.JobType switch
+        {
+            JobType.DirectorySync => _syncEngine.ExecuteAsync(job, cancellationToken),
+            JobType.AzureSqlDatabaseBackup => ExecuteAzureSqlBackupAsync(job, cancellationToken),
+            _ => throw new InvalidOperationException($"Unsupported job type '{job.JobType}'.")
+        };
+    }
+
+    private Task<SyncResult> ExecuteAzureSqlBackupAsync(BackupJob job, CancellationToken cancellationToken)
+    {
+        if (job.AzureSqlBackupJob is null)
+        {
+            throw new InvalidOperationException("Azure SQL backup job configuration is missing.");
+        }
+
+        return _azureSqlBackupExecutor.ExecuteAsync(job, job.AzureSqlBackupJob, cancellationToken);
+    }
+
+    private sealed class UnsupportedAzureSqlBackupExecutor : IAzureSqlBackupExecutor
+    {
+        public Task<SyncResult> ExecuteAsync(
+            BackupJob job,
+            AzureSqlBackupJob azureSqlBackupJob,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException("Azure SQL backup executor is not available in this execution context.");
+        }
     }
 
     private async Task<string?> BuildDetailSummaryAsync(Guid executionId, CancellationToken cancellationToken)

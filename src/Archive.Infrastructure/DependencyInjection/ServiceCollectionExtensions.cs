@@ -31,6 +31,13 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<IJobExecutionService, JobExecutionService>();
         services.AddScoped<ISyncEngine, FileSystemSyncEngine>();
+        services.AddScoped<ISecretStore, DpapiSecretStore>();
+        services.AddScoped<ICredentialProfileService, CredentialProfileService>();
+        services.AddScoped<IAzureSqlBacpacExporter, AzureSqlBacpacExporter>();
+        services.AddScoped<IBackupArtifactUploader, LocalDeviceBackupArtifactUploader>();
+        services.AddScoped<IBackupArtifactUploader, AzureBlobBackupArtifactUploader>();
+        services.AddScoped<IBackupArtifactUploader, GoogleDriveBackupArtifactUploader>();
+        services.AddScoped<IAzureSqlBackupExecutor, AzureSqlBackupExecutor>();
         services.AddScoped<IExecutionLogRetentionService, ExecutionLogRetentionService>();
         services.AddScoped<IJobSchedulerService, JobSchedulerService>();
         services.AddScoped<IBackupJobStateService, BackupJobStateService>();

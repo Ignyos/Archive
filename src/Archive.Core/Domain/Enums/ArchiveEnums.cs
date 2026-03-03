@@ -1,5 +1,25 @@
 namespace Archive.Core.Domain.Enums;
 
+public enum JobType
+{
+    DirectorySync,
+    AzureSqlDatabaseBackup
+}
+
+public enum BackupDestinationType
+{
+    LocalDevice,
+    AzureBlobStorage,
+    GoogleDrive
+}
+
+public enum CredentialProviderType
+{
+    AzureSql,
+    AzureBlobStorage,
+    GoogleDrive
+}
+
 public enum SyncMode
 {
     Mirror,

@@ -6,6 +6,8 @@ public sealed class JobListItemViewModel
 {
     public Guid Id { get; init; }
 
+    public JobType JobType { get; set; } = JobType.DirectorySync;
+
     public string Status { get; set; } = "Idle";
 
     public bool Enabled { get; set; }

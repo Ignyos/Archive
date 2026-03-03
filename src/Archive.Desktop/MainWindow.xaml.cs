@@ -260,6 +260,7 @@ public partial class MainWindow : Window
                 .Select(job => new
                 {
                     job.Id,
+                    job.JobType,
                     job.Name,
                     job.Description,
                     job.SourcePath,
@@ -292,6 +293,7 @@ public partial class MainWindow : Window
                 JobItems.Add(new JobListItemViewModel
                 {
                     Id = row.Id,
+                    JobType = row.JobType,
                     Status = JobListStatusResolver.Resolve(
                         row.Enabled,
                         row.TriggerType,

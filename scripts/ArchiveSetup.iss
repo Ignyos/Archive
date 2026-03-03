@@ -1,5 +1,5 @@
 #define MyAppName "Archive"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Ignyos"
 #define MyAppExeName "Archive.Desktop.exe"
 #define MyAppId "D0C2EBD5-8D4F-4B9D-94C2-8B6E3F0B6F62"

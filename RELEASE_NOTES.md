@@ -1,48 +1,46 @@
-# Release v1.0.0
+# Release v1.1.0
 
 ## Overview
-Archive 1.0.0 is the first stable release of the desktop backup experience. It delivers reliable scheduled backups, safer preview workflows, and clearer run visibility so you can trust what will happen before and after each job.
+This release introduces the first full desktop experience for Archive, with end-to-end job management, scheduling controls, history visibility, and configurable notifications. It also improves reliability with stronger validation, safer scheduler behavior, and automatic log retention cleanup.
 
 ## New Features
-- **Desktop Backup Manager**: Adds a full Windows desktop app to create, edit, run, and monitor backup jobs in one place.
-- **Flexible Scheduling Modes**: Adds **Manual**, **One-Time**, and **Recurring** scheduling so you can run backups on demand or automate them.
-- **Schedule Preview**: Adds next-run preview feedback for recurring and one-time schedules so schedule mistakes are easier to catch before saving.
-- **Preview Operations (Dry Run)**: Adds pre-run operation previews showing files to add/update/delete, skipped files, and estimated transfer size.
-- **Job History and Execution Details**: Adds historical run tracking with per-run statistics and detailed operation-level results.
-- **Application Logs View**: Adds an in-app application logs window for faster diagnostics when troubleshooting.
+- **Desktop Job Management**: Adds a full jobs grid with status, enable/disable toggle, next run visibility, context actions, and double-click editing so you can manage backup jobs from one place.
+- **Job Scheduling Controls**: Adds manual, one-time, and recurring triggers with schedule previews, including simple recurring helpers (daily, weekly, monthly) and cron support.
+- **Run/Stop/History Actions**: Adds run-now, stop, delete, and history actions directly from the main view for faster day-to-day operations.
+- **System Tray Integration**: Adds tray behavior with quick actions, hide-to-tray close behavior, and quick access to schedule and startup options.
+- **Settings Window**: Adds configurable startup behavior, notification preferences, and log retention controls so users can tailor Archive to their workflow.
+- **Application Log Viewer**: Adds in-app application log viewing to simplify troubleshooting without leaving the app.
 
 ## Improvements
-- **Settings Experience**: Adds a dedicated Settings window with auto-save for startup behavior, notifications, and log retention.
-- **System Tray Controls**: Improves background operation with tray actions for showing the app, toggling scheduler state, and exiting cleanly.
-- **Status and Next-Run Clarity**: Improves job list status and next-run visibility so manual, disabled, and scheduled jobs are easier to distinguish.
-- **Safer Job Configuration**: Improves validation for job names, paths, scheduling inputs, and destructive sync options before save.
+- **Scheduling UX**: Improves recurring schedule editing by syncing simple controls with cron expressions and showing upcoming run previews.
+- **Execution Feedback**: Improves execution summaries with warning/error details so failures are easier to diagnose.
+- **Job Editing Safety**: Improves job-edit validation to prevent invalid trigger settings, duplicate names, and unsafe source/destination path combinations.
+- **Notification Experience**: Improves notifications with per-event preferences (start, complete, fail) and deduping/rate-limiting to reduce noisy alerts.
 
 ## Bug Fixes
-- **Preview Access Errors**: Fixes preview failures on protected Windows folders by safely skipping inaccessible system directories during enumeration.
-- **One-Time Scheduling Validation**: Fixes invalid one-time scheduling by blocking past date/time values and showing clear validation messages.
-- **Startup Database Lock Handling**: Fixes startup reliability by retrying database migrations when SQLite is temporarily locked.
-- **Multi-Instance Conflict Protection**: Fixes duplicate-instance issues by enforcing single-instance startup behavior.
+- **Invalid Schedule Guardrails**: Fixes cases where invalid cron or past one-time triggers could be saved, reducing failed or unexpected schedule runs.
+- **Path Conflict Protection**: Fixes scenarios where source/destination overlap could create risky sync behavior, helping avoid accidental recursive or destructive outcomes.
+- **Database Lock Resilience**: Fixes schedule control startup issues under transient SQLite lock conditions by adding retry behavior.
+- **Retention Cleanup Stability**: Fixes long-term log growth by pruning execution/application logs according to retention settings.
 
 ## Technical Changes
-- Migrates persistence to **SQLite + Entity Framework Core migrations** for stronger data consistency and schema evolution.
-- Integrates **Quartz.NET persistent scheduling** for manual, one-time, and recurring trigger execution.
-- Introduces configurable application and execution log retention to control local log growth.
-- Targets **.NET 9** across the desktop and core runtime stack.
+- Introduces Quartz persistent scheduling with SQLite-backed schema initialization.
+- Adds EF Core SQLite persistence for jobs, executions, execution logs, app settings, and application logs.
+- Adds job state and scheduling services for enable/disable, soft delete, schedule registration, run-now, and stop flows.
+- Adds sync execution pipeline with operation stats capture and completion/failure status publishing.
 
 ## Breaking Changes (if any)
-- No user-facing breaking changes in this release.
+- None.
 
 ## Installation
-- Download from: https://github.com/Ignyos/Archive/releases/latest
-- Run `ArchiveSetup.exe`
+- Download and run the Windows installer from the release artifacts.
+- Existing installations can be upgraded by running the new installer over the current version.
 
 ## Requirements
 - Windows 10/11 (64-bit)
-- .NET 9.0 Runtime (included in installer)
+- .NET 9 runtime support on target machine
 
 ## Documentation
-- Docs home: https://ignyos.github.io/Archive/
-- Getting started: https://ignyos.github.io/Archive/getting-started.html
-- Troubleshooting: https://ignyos.github.io/Archive/troubleshooting.html
-- Changelog: https://ignyos.github.io/Archive/changelog.html
+- Product docs: https://archive.ignyos.com/
+- Repository guides: `RELEASE_WORKFLOW.md`, `docs/getting-started.html`, `docs/troubleshooting.html`
 

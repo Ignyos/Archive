@@ -271,6 +271,44 @@ public class JobExecutionServiceTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_Fails_When_AzureSqlJobType_Has_No_Configuration()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var job = new BackupJob
+        {
+            Id = Guid.NewGuid(),
+            Name = "Azure SQL Backup",
+            SourcePath = "N/A",
+            DestinationPath = "N/A",
+            JobType = JobType.AzureSqlDatabaseBackup,
+            Enabled = true,
+            TriggerType = TriggerType.Manual,
+            CreatedAt = DateTime.UtcNow,
+            ModifiedAt = DateTime.UtcNow
+        };
+
+        context.BackupJobs.Add(job);
+        await context.SaveChangesAsync();
+
+        var syncEngine = new StubSyncEngine(new SyncResult());
+        var service = new JobExecutionService(context, syncEngine);
+
+        var execution = await service.ExecuteAsync(job.Id);
+
+        Assert.Equal(JobExecutionStatus.Failed, execution.Status);
+        Assert.Contains(execution.Logs, x => x.Level == LogLevel.Error && x.Message.Contains("configuration is missing"));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_Invokes_RetentionPrune_After_Execution()
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
@@ -612,6 +650,177 @@ public class JobSchedulerServiceTests
     }
 }
 
+public class AzureSqlBackupExecutorTests
+{
+    [Fact]
+    public async Task ExecuteAsync_Uploads_To_All_Destinations_When_All_Succeed()
+    {
+        var exporter = new StubAzureSqlBacpacExporter();
+        var uploaders = new IBackupArtifactUploader[]
+        {
+            new StubBackupArtifactUploader(BackupDestinationType.LocalDevice, shouldFail: false),
+            new StubBackupArtifactUploader(BackupDestinationType.AzureBlobStorage, shouldFail: false)
+        };
+
+        var executor = new AzureSqlBackupExecutor(exporter, uploaders);
+
+        var job = new BackupJob
+        {
+            Id = Guid.NewGuid(),
+            JobType = JobType.AzureSqlDatabaseBackup
+        };
+
+        var azureSqlJob = new AzureSqlBackupJob
+        {
+            JobId = job.Id,
+            DatabaseName = "db",
+            Destinations =
+            {
+                new AzureSqlBackupDestination
+                {
+                    Id = Guid.NewGuid(),
+                    DestinationType = BackupDestinationType.LocalDevice,
+                    Target = "C:\\backups"
+                },
+                new AzureSqlBackupDestination
+                {
+                    Id = Guid.NewGuid(),
+                    DestinationType = BackupDestinationType.AzureBlobStorage,
+                    Target = "archive-container"
+                }
+            }
+        };
+
+        var result = await executor.ExecuteAsync(job, azureSqlJob);
+
+        Assert.Equal(1, result.FilesScanned);
+        Assert.Equal(2, result.FilesCopied);
+        Assert.Equal(0, result.FilesFailed);
+        Assert.Equal(0, result.WarningCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Returns_Warnings_When_One_Destination_Fails()
+    {
+        var exporter = new StubAzureSqlBacpacExporter();
+        var uploaders = new IBackupArtifactUploader[]
+        {
+            new StubBackupArtifactUploader(BackupDestinationType.LocalDevice, shouldFail: false),
+            new StubBackupArtifactUploader(BackupDestinationType.GoogleDrive, shouldFail: true)
+        };
+
+        var executor = new AzureSqlBackupExecutor(exporter, uploaders);
+
+        var job = new BackupJob
+        {
+            Id = Guid.NewGuid(),
+            JobType = JobType.AzureSqlDatabaseBackup
+        };
+
+        var azureSqlJob = new AzureSqlBackupJob
+        {
+            JobId = job.Id,
+            DatabaseName = "db",
+            Destinations =
+            {
+                new AzureSqlBackupDestination
+                {
+                    Id = Guid.NewGuid(),
+                    DestinationType = BackupDestinationType.LocalDevice,
+                    Target = "C:\\backups"
+                },
+                new AzureSqlBackupDestination
+                {
+                    Id = Guid.NewGuid(),
+                    DestinationType = BackupDestinationType.GoogleDrive,
+                    Target = "drive-folder-id"
+                }
+            }
+        };
+
+        var result = await executor.ExecuteAsync(job, azureSqlJob);
+
+        Assert.Equal(1, result.FilesCopied);
+        Assert.Equal(1, result.FilesFailed);
+        Assert.Equal(1, result.WarningCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Throws_When_All_Destinations_Fail()
+    {
+        var exporter = new StubAzureSqlBacpacExporter();
+        var uploaders = new IBackupArtifactUploader[]
+        {
+            new StubBackupArtifactUploader(BackupDestinationType.LocalDevice, shouldFail: true)
+        };
+
+        var executor = new AzureSqlBackupExecutor(exporter, uploaders);
+
+        var job = new BackupJob
+        {
+            Id = Guid.NewGuid(),
+            JobType = JobType.AzureSqlDatabaseBackup
+        };
+
+        var azureSqlJob = new AzureSqlBackupJob
+        {
+            JobId = job.Id,
+            DatabaseName = "db",
+            Destinations =
+            {
+                new AzureSqlBackupDestination
+                {
+                    Id = Guid.NewGuid(),
+                    DestinationType = BackupDestinationType.LocalDevice,
+                    Target = "C:\\backups"
+                }
+            }
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync(job, azureSqlJob));
+    }
+
+    private sealed class StubAzureSqlBacpacExporter : IAzureSqlBacpacExporter
+    {
+        public Task<string> ExportAsync(BackupJob job, AzureSqlBackupJob azureSqlBackupJob, CancellationToken cancellationToken = default)
+        {
+            var artifactDirectory = Path.Combine(Path.GetTempPath(), "ArchiveTests", "AzureSql");
+            Directory.CreateDirectory(artifactDirectory);
+            var artifactPath = Path.Combine(artifactDirectory, $"{Guid.NewGuid():N}.bacpac");
+            File.WriteAllText(artifactPath, "test-artifact");
+            return Task.FromResult(artifactPath);
+        }
+    }
+
+    private sealed class StubBackupArtifactUploader : IBackupArtifactUploader
+    {
+        private readonly bool _shouldFail;
+
+        public StubBackupArtifactUploader(BackupDestinationType destinationType, bool shouldFail)
+        {
+            DestinationType = destinationType;
+            _shouldFail = shouldFail;
+        }
+
+        public BackupDestinationType DestinationType { get; }
+
+        public Task UploadAsync(
+            string artifactPath,
+            BackupJob job,
+            AzureSqlBackupJob azureSqlBackupJob,
+            AzureSqlBackupDestination destination,
+            CancellationToken cancellationToken = default)
+        {
+            if (_shouldFail)
+            {
+                throw new InvalidOperationException("Simulated upload failure");
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+}
+
 public class ArchiveScheduleControlServiceTests
 {
     [Fact]
@@ -933,5 +1142,72 @@ public class ExecutionLogRetentionServiceTests
 
         var appLogCount = await context.ApplicationLogs.AsNoTracking().CountAsync();
         Assert.Equal(1, appLogCount);
+    }
+}
+
+public class CredentialProfileServiceTests
+{
+    [Fact]
+    public async Task CreateAsync_Then_ListAsync_Returns_Profile_For_Future_Selection()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var service = new CredentialProfileService(context);
+
+        var profileId = await service.CreateAsync(
+            CredentialProviderType.AzureSql,
+            "Prod Azure SQL",
+            "Server=tcp:test.database.windows.net;Database=Archive;User ID=test;Password=secret;");
+
+        var allAzureSqlProfiles = await service.ListAsync(CredentialProviderType.AzureSql);
+
+        var profile = Assert.Single(allAzureSqlProfiles);
+        Assert.Equal(profileId, profile.Id);
+        Assert.Equal("Prod Azure SQL", profile.Name);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_Allows_Changing_Name_And_Secret_For_Existing_Profile()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var profileService = new CredentialProfileService(context);
+
+        var profileId = await profileService.CreateAsync(
+            CredentialProviderType.AzureBlobStorage,
+            "Blob Account A",
+            "UseDevelopmentStorage=true;");
+
+        var updated = await profileService.UpdateAsync(
+            profileId,
+            "Blob Account B",
+            "DefaultEndpointsProtocol=https;AccountName=archive;AccountKey=abc=;EndpointSuffix=core.windows.net");
+
+        Assert.True(updated);
+
+        var secretStore = new DpapiSecretStore(context);
+        var secret = await secretStore.GetSecretAsync(profileId.ToString());
+        Assert.NotNull(secret);
+        Assert.Contains("AccountName=archive", secret, StringComparison.Ordinal);
+
+        var allProfiles = await profileService.ListAsync(CredentialProviderType.AzureBlobStorage);
+        var profile = Assert.Single(allProfiles);
+        Assert.Equal("Blob Account B", profile.Name);
     }
 }

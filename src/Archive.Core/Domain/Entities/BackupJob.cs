@@ -6,6 +6,8 @@ public sealed class BackupJob
 {
     public Guid Id { get; set; }
 
+    public JobType JobType { get; set; } = JobType.DirectorySync;
+
     public string? Name { get; set; }
 
     public string? Description { get; set; }
@@ -51,4 +53,6 @@ public sealed class BackupJob
     public ICollection<JobExecution> Executions { get; set; } = new List<JobExecution>();
 
     public ICollection<BackupJobExclusionPattern> BackupJobExclusionPatterns { get; set; } = new List<BackupJobExclusionPattern>();
+
+    public AzureSqlBackupJob? AzureSqlBackupJob { get; set; }
 }

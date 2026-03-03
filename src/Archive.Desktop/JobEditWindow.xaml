@@ -3,12 +3,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Edit Job"
         Icon="Assets/icon.ico"
-        Height="680"
-        Width="520"
+        Height="860"
+        Width="620"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize">
     <Grid Margin="16">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -49,7 +50,7 @@
             <TextBlock VerticalAlignment="Top" Margin="0,4,0,0" Text="Description" />
             <TextBox Grid.Column="1"
                      x:Name="DescriptionTextBox"
-                     Height="90"
+                     Height="72"
                      TextWrapping="Wrap"
                      AcceptsReturn="True"
                      VerticalScrollBarVisibility="Auto" />
@@ -59,14 +60,12 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <TextBlock VerticalAlignment="Center" Text="Source" />
-            <TextBox Grid.Column="1" x:Name="SourcePathTextBox" Margin="0,0,8,0" />
-            <Button Grid.Column="2"
-                    Content="Folder..."
-                    Click="BrowseSourceFolderButton_OnClick" />
+            <TextBlock VerticalAlignment="Center" Text="Job Type" />
+            <ComboBox Grid.Column="1"
+                      x:Name="JobTypeComboBox"
+                      SelectionChanged="JobTypeComboBox_OnSelectionChanged" />
         </Grid>
 
         <Grid Grid.Row="4" Margin="0,12,0,0">
@@ -76,21 +75,38 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <TextBlock VerticalAlignment="Center" Text="Destination" />
-            <TextBox Grid.Column="1" x:Name="DestinationPathTextBox" Margin="0,0,8,0" />
-            <Button Grid.Column="2"
+            <TextBlock x:Name="SourceLabelTextBlock" VerticalAlignment="Center" Text="Source" />
+            <TextBox Grid.Column="1" x:Name="SourcePathTextBox" Margin="0,0,8,0" />
+            <Button x:Name="BrowseSourceFolderButton"
+                    Grid.Column="2"
                     Content="Folder..."
-                    Click="BrowseDestinationFolderButton_OnClick" />
+                    Click="BrowseSourceFolderButton_OnClick" />
         </Grid>
 
         <Grid Grid.Row="5" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <TextBlock VerticalAlignment="Top" Margin="0,4,0,0" Text="Sync Options" />
-            <StackPanel Grid.Column="1">
+            <TextBlock x:Name="DestinationLabelTextBlock" VerticalAlignment="Center" Text="Destination" />
+            <TextBox Grid.Column="1" x:Name="DestinationPathTextBox" Margin="0,0,8,0" />
+            <Button x:Name="BrowseDestinationFolderButton"
+                    Grid.Column="2"
+                    Content="Folder..."
+                    Click="BrowseDestinationFolderButton_OnClick" />
+        </Grid>
+
+        <Grid Grid.Row="6" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="110" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock x:Name="OptionsLabelTextBlock" VerticalAlignment="Top" Margin="0,4,0,0" Text="Sync Options" />
+
+            <StackPanel x:Name="SyncOptionsPanel" Grid.Column="1">
                 <CheckBox x:Name="RecursiveCheckBox" Content="Include subdirectories" />
                 <CheckBox x:Name="DeleteOrphanedCheckBox"
                           Margin="0,6,0,0"
@@ -103,9 +119,71 @@
                           Margin="0,6,0,0"
                           Content="Verify copied files with hash check" />
             </StackPanel>
+
+            <StackPanel x:Name="AzureSqlOptionsPanel" Grid.Column="1" Visibility="Collapsed">
+                <TextBlock Text="Source Profile (Azure SQL)" />
+                <ComboBox x:Name="SourceCredentialProfileComboBox"
+                          Margin="0,4,0,0"
+                          DisplayMemberPath="Name" />
+
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="140" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="NewSourceCredentialNameTextBox"
+                             Margin="0,0,8,0"
+                             ToolTip="New source profile name" />
+                    <PasswordBox x:Name="NewSourceCredentialSecretPasswordBox"
+                                 Grid.Column="1"
+                                 Margin="0,0,8,0"
+                                 ToolTip="Connection string or JSON payload" />
+                    <Button Grid.Column="2"
+                            Width="96"
+                            Content="Add Source"
+                            Click="AddSourceCredentialProfileButton_OnClick" />
+                </Grid>
+
+                <TextBlock Margin="0,12,0,0" Text="Destination Type" />
+                <ComboBox x:Name="AzureDestinationTypeComboBox"
+                          Margin="0,4,0,0"
+                          SelectionChanged="AzureDestinationTypeComboBox_OnSelectionChanged" />
+
+                <TextBlock Margin="0,12,0,0" Text="Destination Target" />
+                <TextBox x:Name="AzureDestinationTargetTextBox"
+                         Margin="0,4,0,0"
+                         ToolTip="Local folder path, blob container[/prefix], or Google Drive folder id" />
+
+                <TextBlock x:Name="DestinationProfileLabelTextBlock"
+                           Margin="0,12,0,0"
+                           Text="Destination Profile" />
+                <ComboBox x:Name="DestinationCredentialProfileComboBox"
+                          Margin="0,4,0,0"
+                          DisplayMemberPath="Name" />
+
+                <Grid x:Name="NewDestinationCredentialGrid" Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="140" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="NewDestinationCredentialNameTextBox"
+                             Margin="0,0,8,0"
+                             ToolTip="New destination profile name" />
+                    <PasswordBox x:Name="NewDestinationCredentialSecretPasswordBox"
+                                 Grid.Column="1"
+                                 Margin="0,0,8,0"
+                                 ToolTip="Connection string or service account JSON" />
+                    <Button Grid.Column="2"
+                            Width="122"
+                            Content="Add Destination"
+                            Click="AddDestinationCredentialProfileButton_OnClick" />
+                </Grid>
+            </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="6" Margin="0,12,0,0">
+        <Grid Grid.Row="7" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
@@ -115,7 +193,7 @@
             <ComboBox Grid.Column="1" x:Name="TriggerTypeComboBox" SelectionChanged="ScheduleInput_OnChanged" />
         </Grid>
 
-        <Grid Grid.Row="7" Margin="0,12,0,0" x:Name="SimpleRecurringRowGrid">
+        <Grid Grid.Row="8" Margin="0,12,0,0" x:Name="SimpleRecurringRowGrid">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
@@ -155,7 +233,7 @@
             </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="8" Margin="0,12,0,0" x:Name="CronRowGrid">
+        <Grid Grid.Row="9" Margin="0,12,0,0" x:Name="CronRowGrid">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
@@ -165,7 +243,7 @@
             <TextBox Grid.Column="1" x:Name="CronExpressionTextBox" TextChanged="ScheduleInput_OnChanged" />
         </Grid>
 
-        <Grid Grid.Row="9" Margin="0,12,0,0" x:Name="OneTimeRowGrid">
+        <Grid Grid.Row="10" Margin="0,12,0,0" x:Name="OneTimeRowGrid">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
@@ -186,7 +264,7 @@
             </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="10" Margin="0,12,0,0">
+        <Grid Grid.Row="11" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
@@ -196,7 +274,7 @@
             <CheckBox Grid.Column="1" x:Name="EnabledCheckBox" VerticalAlignment="Center" />
         </Grid>
 
-        <Border Grid.Row="11"
+        <Border Grid.Row="12"
                 Margin="0,12,0,0"
             Padding="8">
             <TextBlock x:Name="SchedulePreviewTextBlock"
@@ -204,17 +282,18 @@
                        TextWrapping="Wrap" />
         </Border>
 
-        <TextBlock Grid.Row="12"
+        <TextBlock Grid.Row="13"
                    Margin="0,16,0,0"
                    Foreground="Red"
                    Text=""
                    x:Name="ValidationTextBlock" />
 
-        <StackPanel Grid.Row="13"
+        <StackPanel Grid.Row="14"
                     Margin="0,16,0,0"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right">
             <Button Content="Preview Operations"
+                x:Name="PreviewOperationsButton"
                 Width="140"
                 Margin="0,0,8,0"
                 Click="PreviewOperationsButton_OnClick" />
