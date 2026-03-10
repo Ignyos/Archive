@@ -17,4 +17,6 @@ public sealed class AzureSqlBackupJob
     public BackupJob Job { get; set; } = null!;
 
     public ICollection<AzureSqlBackupDestination> Destinations { get; set; } = new List<AzureSqlBackupDestination>();
+
+    public ICollection<AzureSqlBackupWorkflowAction> WorkflowActions { get; set; } = new List<AzureSqlBackupWorkflowAction>();
 }

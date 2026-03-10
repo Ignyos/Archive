@@ -1,7 +1,6 @@
 using Archive.Core.Domain.Entities;
 using Archive.Core.Jobs;
-using System.Diagnostics;
-using System.Text;
+using Microsoft.SqlServer.Dac;
 
 namespace Archive.Infrastructure.Jobs;
 
@@ -50,50 +49,26 @@ public sealed class AzureSqlBacpacExporter : IAzureSqlBacpacExporter
 
         var artifactPath = Path.Combine(outputDirectory, $"{SanitizeFileSegment(azureSqlBackupJob.DatabaseName)}_{timestamp}.bacpac");
 
-        var arguments = new StringBuilder();
-        arguments.Append("/Action:Export ");
-        arguments.Append($"/SourceConnectionString:\"{EscapeForArgument(connectionString)}\" ");
-        arguments.Append($"/TargetFile:\"{EscapeForArgument(artifactPath)}\"");
-
-        using var process = new Process
+        try
         {
-            StartInfo = new ProcessStartInfo
+            await Task.Run(() =>
             {
-                FileName = "SqlPackage",
-                Arguments = arguments.ToString(),
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
-        };
-
-        if (!process.Start())
-        {
-            throw new InvalidOperationException("Unable to start SqlPackage process for Azure SQL export.");
+                var dacServices = new DacServices(connectionString);
+                dacServices.ExportBacpac(artifactPath, azureSqlBackupJob.DatabaseName);
+            }, cancellationToken).ConfigureAwait(false);
         }
-
-        var standardOutputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var standardErrorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-
-        var standardOutput = await standardOutputTask.ConfigureAwait(false);
-        var standardError = await standardErrorTask.ConfigureAwait(false);
-
-        if (process.ExitCode != 0)
+        catch (OperationCanceledException)
         {
-            var message = string.IsNullOrWhiteSpace(standardError)
-                ? standardOutput
-                : standardError;
-
-            throw new InvalidOperationException(
-                $"SqlPackage export failed with exit code {process.ExitCode}. {message}".Trim());
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Azure SQL export failed for database '{azureSqlBackupJob.DatabaseName}'.", ex);
         }
 
         if (!File.Exists(artifactPath))
         {
-            throw new InvalidOperationException("SqlPackage completed but no backup artifact was produced.");
+            throw new InvalidOperationException("Azure SQL export completed but no backup artifact was produced.");
         }
 
         return artifactPath;
@@ -107,11 +82,6 @@ public sealed class AzureSqlBacpacExporter : IAzureSqlBacpacExporter
         return string.IsNullOrWhiteSpace(explicitConnectionString)
             ? secretPayload.Trim()
             : explicitConnectionString.Trim();
-    }
-
-    private static string EscapeForArgument(string value)
-    {
-        return value.Replace("\"", "\\\"", StringComparison.Ordinal);
     }
 
     private static string SanitizeFileSegment(string value)

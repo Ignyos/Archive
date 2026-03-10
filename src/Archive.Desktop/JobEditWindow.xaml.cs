@@ -348,7 +348,21 @@ public partial class JobEditWindow : Window
 
             if (string.IsNullOrWhiteSpace(AzureDestinationTargetTextBox.Text))
             {
-                ValidationTextBlock.Text = "Destination target is required.";
+                ValidationTextBlock.Text = "Destination target is required. Use the format shown below the field.";
+                return;
+            }
+
+            if (SourceCredentialProfileComboBox.SelectedItem is not CredentialProfileOption)
+            {
+                ValidationTextBlock.Text = "Select an Azure SQL source profile, or add one before saving.";
+                return;
+            }
+
+            if (AzureDestinationTypeComboBox.SelectedItem is BackupDestinationType destinationType
+                && RequiresDestinationCredentials(destinationType)
+                && DestinationCredentialProfileComboBox.SelectedItem is not CredentialProfileOption)
+            {
+                ValidationTextBlock.Text = "Select a destination credential profile, or add one before saving.";
                 return;
             }
         }
@@ -1297,7 +1311,18 @@ public partial class JobEditWindow : Window
         BrowseSourceFolderButton.Visibility = isAzureSql ? Visibility.Collapsed : Visibility.Visible;
         BrowseDestinationFolderButton.Visibility = isAzureSql ? Visibility.Collapsed : Visibility.Visible;
 
+        SourcePathTextBox.ToolTip = isAzureSql
+            ? "Azure SQL Server name, e.g. myserver.database.windows.net"
+            : null;
+
+        DestinationPathTextBox.ToolTip = isAzureSql
+            ? "Azure SQL Database name"
+            : null;
+
         PreviewOperationsButton.IsEnabled = !isAzureSql;
+        PreviewOperationsButton.ToolTip = isAzureSql
+            ? "Preview is available for directory sync jobs. For Azure SQL backup jobs, save and use Run Now from the Jobs list."
+            : null;
 
         RefreshAzureDestinationProfileUi();
     }
@@ -1305,11 +1330,33 @@ public partial class JobEditWindow : Window
     private void RefreshAzureDestinationProfileUi()
     {
         var destinationType = AzureDestinationTypeComboBox.SelectedItem as BackupDestinationType?;
-        var requiresCredentials = destinationType is BackupDestinationType.AzureBlobStorage or BackupDestinationType.GoogleDrive;
+        var requiresCredentials = destinationType.HasValue && RequiresDestinationCredentials(destinationType.Value);
+
+        AzureDestinationTargetHintTextBlock.Text = destinationType switch
+        {
+            BackupDestinationType.LocalDevice => "LocalDevice format: existing folder path, e.g. D:\\ArchiveBackups\\Sql",
+            BackupDestinationType.AzureBlobStorage => "AzureBlobStorage format: container or container/prefix, e.g. archive-backups/sql",
+            BackupDestinationType.GoogleDrive => "GoogleDrive format: destination folder id in Drive",
+            _ => "Enter a target based on destination type."
+        };
+
+        AzureDestinationTargetTextBox.ToolTip = AzureDestinationTargetHintTextBlock.Text;
 
         DestinationProfileLabelTextBlock.Visibility = requiresCredentials ? Visibility.Visible : Visibility.Collapsed;
         DestinationCredentialProfileComboBox.Visibility = requiresCredentials ? Visibility.Visible : Visibility.Collapsed;
         NewDestinationCredentialGrid.Visibility = requiresCredentials ? Visibility.Visible : Visibility.Collapsed;
+
+        NewDestinationCredentialSecretPasswordBox.ToolTip = destinationType switch
+        {
+            BackupDestinationType.AzureBlobStorage => "Azure Storage connection string",
+            BackupDestinationType.GoogleDrive => "Google service account JSON payload",
+            _ => "Connection string or service account JSON"
+        };
+    }
+
+    private static bool RequiresDestinationCredentials(BackupDestinationType destinationType)
+    {
+        return destinationType is BackupDestinationType.AzureBlobStorage or BackupDestinationType.GoogleDrive;
     }
 
     private static CredentialProviderType? ToCredentialProviderType(BackupDestinationType destinationType)

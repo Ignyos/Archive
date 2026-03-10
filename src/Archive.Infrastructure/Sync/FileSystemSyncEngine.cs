@@ -42,10 +42,7 @@ public sealed class FileSystemSyncEngine : ISyncEngine
             .Cast<string>()
             .ToArray();
 
-        var sourceFiles = Directory.EnumerateFiles(
-            job.SourcePath,
-            "*",
-            recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
+        var sourceFiles = EnumerateFilesSafe(job.SourcePath, recursive);
 
         var sourceRelativeToFullPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -146,10 +143,7 @@ public sealed class FileSystemSyncEngine : ISyncEngine
 
         if (shouldDeleteOrphans)
         {
-            var destinationFiles = Directory.EnumerateFiles(
-                job.DestinationPath,
-                "*",
-                recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
+            var destinationFiles = EnumerateFilesSafe(job.DestinationPath, recursive);
 
             foreach (var destinationFullPath in destinationFiles)
             {
@@ -265,6 +259,19 @@ public sealed class FileSystemSyncEngine : ISyncEngine
     {
         var attributes = File.GetAttributes(path);
         return attributes.HasFlag(FileAttributes.Hidden) || attributes.HasFlag(FileAttributes.System);
+    }
+
+    private static IEnumerable<string> EnumerateFilesSafe(string rootPath, bool recursive)
+    {
+        return Directory.EnumerateFiles(
+            rootPath,
+            "*",
+            new EnumerationOptions
+            {
+                RecurseSubdirectories = recursive,
+                IgnoreInaccessible = true,
+                ReturnSpecialDirectories = false
+            });
     }
 
     private static async Task<bool> VerifyFileContentAsync(

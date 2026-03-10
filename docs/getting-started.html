@@ -24,60 +24,228 @@
   <main class="container">
     <section class="panel">
       <h1 class="page-title">Getting Started</h1>
-      <p class="lead">Install Archive, configure your first job, and validate results safely.</p>
+      <p class="lead">Choose your Archive version to view matching instructions.</p>
+
+      <div class="version-selector">
+        <label for="docVersionSelect"><strong>Documentation version</strong></label>
+        <select id="docVersionSelect" aria-label="Select documentation version">
+          <option value="1.1.0" selected>v1.1.0 (latest)</option>
+          <option value="1.0.0">v1.0.0</option>
+        </select>
+      </div>
+
+      <p class="notice">Tip: Share a direct link with <code>?v=1.1.0</code> or <code>?v=1.0.0</code> so users land on the correct version.</p>
     </section>
 
-    <section class="panel">
-      <h2>1) Install Archive</h2>
-      <ul>
-        <li>Download from: <a href="https://github.com/Ignyos/Archive/releases/latest">https://github.com/Ignyos/Archive/releases/latest</a></li>
-        <li>Run <code>ArchiveSetup.exe</code></li>
-      </ul>
+    <section class="version-guide" data-version="1.1.0">
+      <section class="panel">
+        <h2>v1.1.0: Complete Usage Guide</h2>
+        <p>This version includes the full desktop workflow: jobs grid, scheduling controls, settings, logs, notifications, and history.</p>
+      </section>
+
+      <section class="panel">
+        <h2>1) Install and launch</h2>
+        <ol>
+          <li>Download the installer from <a href="https://github.com/Ignyos/Archive/releases/latest">latest release</a>.</li>
+          <li>Run <code>ArchiveSetup.exe</code> and complete installation.</li>
+          <li>Open Archive from Start Menu or desktop shortcut.</li>
+          <li>Optional: Open <strong>File → Settings</strong> and enable <strong>Run Archive when Windows starts</strong>.</li>
+        </ol>
+      </section>
+
+      <section class="panel">
+        <h2>2) Create a directory sync job</h2>
+        <ol>
+          <li>Select <strong>File → New Job</strong>.</li>
+          <li>Set <strong>Job Type</strong> to <strong>DirectorySync</strong>.</li>
+          <li>Enter <strong>Name</strong> and optional <strong>Description</strong>.</li>
+          <li>Set <strong>Source</strong> to the folder/file to protect.</li>
+          <li>Set <strong>Destination</strong> to an existing backup folder.</li>
+          <li>Choose sync options:
+            <ul>
+              <li><strong>Include subdirectories</strong> for recursive copy</li>
+              <li><strong>Delete orphaned destination files</strong> for mirror-style behavior</li>
+              <li><strong>Skip hidden and system files</strong> for safer defaults</li>
+              <li><strong>Verify copied files</strong> for integrity checks</li>
+            </ul>
+          </li>
+          <li>Choose trigger type:
+            <ul>
+              <li><strong>Manual</strong> for ad-hoc runs</li>
+              <li><strong>One-Time</strong> for a specific date/time</li>
+              <li><strong>Recurring</strong> using simple controls or cron</li>
+            </ul>
+          </li>
+          <li>Select <strong>Preview Operations</strong> to review expected actions.</li>
+          <li>Select <strong>Save</strong>.</li>
+        </ol>
+      </section>
+
+      <section class="panel">
+        <h2>2b) Create an Azure SQL database backup job</h2>
+        <ol>
+          <li>Select <strong>File → New Job</strong>.</li>
+          <li>Set <strong>Job Type</strong> to <strong>AzureSqlDatabaseBackup</strong>.</li>
+          <li>Enter job <strong>Name</strong> and optional <strong>Description</strong>.</li>
+          <li>Configure source fields:
+            <ul>
+              <li><strong>Azure SQL Server</strong> = your server host name (for example <code>myserver.database.windows.net</code>).</li>
+              <li><strong>Database</strong> = exact database name to back up.</li>
+              <li><strong>Source Profile (Azure SQL)</strong> = choose an existing profile or create a new one with a valid Azure SQL connection string.</li>
+            </ul>
+          </li>
+          <li>Configure destination fields:
+            <ul>
+              <li><strong>Destination Type</strong> = <code>LocalDevice</code>, <code>AzureBlobStorage</code>, or <code>GoogleDrive</code>.</li>
+              <li><strong>Destination Target</strong>:
+                <ul>
+                  <li><strong>LocalDevice</strong>: local folder path (example <code>D:\ArchiveBackups</code>).</li>
+                  <li><strong>AzureBlobStorage</strong>: <code>container</code> or <code>container/prefix</code> (example <code>archive-backups/sql</code>).</li>
+                  <li><strong>GoogleDrive</strong>: target Drive folder id.</li>
+                </ul>
+              </li>
+              <li><strong>Destination Profile</strong> (required for Azure Blob and Google Drive) = select existing credentials profile or create a new one.
+                <ul>
+                  <li>Azure Blob profile secret = storage connection string.</li>
+                  <li>Google Drive profile secret = service account JSON payload.</li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li>Choose trigger type (Manual, One-Time, Recurring) and save.</li>
+        </ol>
+      </section>
+
+      <section class="panel">
+        <h2>2c) Job type quick reference (v1.1.0)</h2>
+        <ul>
+          <li><strong>DirectorySync</strong>: Source = file/folder path, Destination = existing local folder path.</li>
+          <li><strong>AzureSqlDatabaseBackup</strong>: Source = Azure SQL server + database + source credential profile, Destination = selected destination type + target + optional destination credential profile.</li>
+        </ul>
+        <p class="notice"><strong>Current scope:</strong> v1.1.0 UI configures one destination per Azure SQL backup job.</p>
+      </section>
+
+      <section class="panel">
+        <h2>3) Run and monitor a job</h2>
+        <ol>
+          <li>In the main jobs grid, right-click a job and select <strong>Run Now</strong>.</li>
+          <li>Use the <strong>Status</strong> and <strong>Next Run</strong> columns for quick health checks.</li>
+          <li>Open <strong>View History</strong> for execution details (files copied, warnings, failures).</li>
+          <li>Use <strong>Stop Job</strong> if an active run needs to be interrupted.</li>
+        </ol>
+      </section>
+
+      <section class="panel">
+        <h2>4) Configure notifications and retention</h2>
+        <ol>
+          <li>Open <strong>File → Settings</strong>.</li>
+          <li>Enable notifications globally, then choose per-event notifications:
+            <ul>
+              <li>Notify on start</li>
+              <li>Notify on completion</li>
+              <li>Notify on failure</li>
+            </ul>
+          </li>
+          <li>Set <strong>Keep logs for</strong> to your preferred retention period.</li>
+          <li>Use <strong>View Logs</strong> from the File menu for troubleshooting.</li>
+        </ol>
+      </section>
+
+      <section class="panel">
+        <h2>5) Safe-operating checklist</h2>
+        <ul>
+          <li>Keep destination outside source to avoid recursive growth.</li>
+          <li>Use a test destination first before enabling delete-orphaned behavior.</li>
+          <li>Prefer folder-level sources instead of entire drive roots when possible.</li>
+          <li>Review history after first scheduled run to confirm expected behavior.</li>
+        </ul>
+      </section>
     </section>
 
-    <section class="panel">
-      <h2>2) Create your first job</h2>
-      <ol>
-        <li>Open Archive.</li>
-        <li>Select <strong>New Job</strong>.</li>
-        <li>Enter a job name.</li>
-        <li>Pick a source path (file or folder).</li>
-        <li>Pick a destination folder.</li>
-        <li>Choose schedule type (Manual, One-time, or Recurring).</li>
-        <li>Save.</li>
-      </ol>
-    </section>
+    <section class="version-guide" data-version="1.0.0">
+      <section class="panel">
+        <h2>v1.0.0: Usage Guide</h2>
+        <p>This version focuses on core file sync jobs with manual/one-time/recurring scheduling.</p>
+      </section>
 
-    <section class="panel">
-      <h2>3) Preview operations</h2>
-      <p>Use <strong>Preview Operations</strong> before running a job.</p>
-      <ul>
-        <li>Preview uses your configured sync options.</li>
-        <li>Protected Windows system folders may be skipped automatically.</li>
-      </ul>
-    </section>
+      <section class="panel">
+        <h2>1) Install Archive</h2>
+        <ol>
+          <li>Download from <a href="https://github.com/Ignyos/Archive/releases/latest">latest release</a>.</li>
+          <li>Run <code>ArchiveSetup.exe</code>.</li>
+          <li>Open Archive.</li>
+        </ol>
+      </section>
 
-    <section class="panel">
-      <h2>4) Run and verify</h2>
-      <ul>
-        <li>Run the job manually from the app.</li>
-        <li>Confirm copied/updated files at destination.</li>
-        <li>Review execution history/logs in the app.</li>
-      </ul>
-    </section>
+      <section class="panel">
+        <h2>2) Create a backup job</h2>
+        <ol>
+          <li>Select <strong>New Job</strong>.</li>
+          <li>Enter job name and optional description.</li>
+          <li>Choose source file/folder and destination folder.</li>
+          <li>Select trigger type (Manual, One-time, Recurring).</li>
+          <li>Configure sync options and save.</li>
+        </ol>
+      </section>
 
-    <section class="panel">
-      <h2>Tips</h2>
-      <ul>
-        <li>Avoid using a whole drive root (like <code>E:\</code>) as source when possible.</li>
-        <li>Prefer a specific top-level folder to reduce permission-related skips.</li>
-        <li>Keep destination outside source to avoid recursive copy behavior.</li>
-      </ul>
+      <section class="panel">
+        <h2>3) Preview and execute</h2>
+        <ol>
+          <li>Use <strong>Preview Operations</strong> before first run.</li>
+          <li>Run manually and verify destination contents.</li>
+          <li>Check execution history for warnings or failures.</li>
+        </ol>
+      </section>
+
+      <section class="panel">
+        <h2>4) Recommended usage tips</h2>
+        <ul>
+          <li>Use specific source folders instead of full drive roots.</li>
+          <li>Do not place destination inside source.</li>
+          <li>Keep recurring schedules simple until first runs are validated.</li>
+        </ul>
+      </section>
     </section>
   </main>
 
   <footer class="container site-footer">
     Next step: verify your release and install path from the downloads page.
   </footer>
+
+  <script>
+    (function () {
+      const selector = document.getElementById('docVersionSelect');
+      const guides = Array.from(document.querySelectorAll('.version-guide'));
+      if (!selector || guides.length === 0) {
+        return;
+      }
+
+      const query = new URLSearchParams(window.location.search);
+      const queryVersion = query.get('v');
+      const supported = new Set(guides.map(section => section.getAttribute('data-version')));
+      const defaultVersion = selector.value;
+
+      function applyVersion(version) {
+        const resolved = supported.has(version) ? version : defaultVersion;
+
+        selector.value = resolved;
+
+        guides.forEach(section => {
+          const match = section.getAttribute('data-version') === resolved;
+          section.hidden = !match;
+        });
+
+        const url = new URL(window.location.href);
+        url.searchParams.set('v', resolved);
+        window.history.replaceState({}, '', url);
+      }
+
+      selector.addEventListener('change', function (event) {
+        applyVersion(event.target.value);
+      });
+
+      applyVersion(queryVersion || defaultVersion);
+    })();
+  </script>
 </body>
 </html>

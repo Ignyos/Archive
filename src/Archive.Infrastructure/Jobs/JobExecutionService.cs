@@ -50,6 +50,9 @@ public sealed class JobExecutionService : IJobExecutionService
             .Include(x => x.SyncOptions)
             .Include(x => x.AzureSqlBackupJob)
                 .ThenInclude(x => x!.Destinations)
+            .Include(x => x.AzureSqlBackupJob)
+                .ThenInclude(x => x!.WorkflowActions)
+                    .ThenInclude(x => x.AzureSqlBackupDestination)
             .FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
 
         if (job is null)

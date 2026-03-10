@@ -28,6 +28,8 @@ public sealed class ArchiveDbContext : DbContext
 
     public DbSet<AzureSqlBackupDestination> AzureSqlBackupDestinations => Set<AzureSqlBackupDestination>();
 
+    public DbSet<AzureSqlBackupWorkflowAction> AzureSqlBackupWorkflowActions => Set<AzureSqlBackupWorkflowAction>();
+
     public DbSet<ApplicationLog> ApplicationLogs => Set<ApplicationLog>();
 
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
@@ -68,6 +70,22 @@ public sealed class ArchiveDbContext : DbContext
             .WithMany(x => x.Destinations)
             .HasForeignKey(x => x.AzureSqlBackupJobId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<AzureSqlBackupWorkflowAction>()
+            .HasOne(x => x.AzureSqlBackupJob)
+            .WithMany(x => x.WorkflowActions)
+            .HasForeignKey(x => x.AzureSqlBackupJobId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<AzureSqlBackupWorkflowAction>()
+            .HasOne(x => x.AzureSqlBackupDestination)
+            .WithMany()
+            .HasForeignKey(x => x.AzureSqlBackupDestinationId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<AzureSqlBackupWorkflowAction>()
+            .HasIndex(x => new { x.AzureSqlBackupJobId, x.StepOrder })
+            .IsUnique();
 
         modelBuilder.Entity<JobExecution>()
             .HasMany(x => x.Logs)

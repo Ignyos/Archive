@@ -20,6 +20,13 @@ public enum CredentialProviderType
     GoogleDrive
 }
 
+public enum AzureSqlWorkflowActionType
+{
+    AzureSqlExportToDestination,
+    BlobToLocalCopy,
+    BlobToGoogleDriveCopy
+}
+
 public enum SyncMode
 {
     Mirror,

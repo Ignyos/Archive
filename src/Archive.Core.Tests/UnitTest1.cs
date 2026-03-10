@@ -780,6 +780,66 @@ public class AzureSqlBackupExecutorTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync(job, azureSqlJob));
     }
 
+    [Fact]
+    public async Task ExecuteAsync_Uses_WorkflowActions_When_Configured()
+    {
+        var exporter = new StubAzureSqlBacpacExporter();
+        var uploaders = new IBackupArtifactUploader[]
+        {
+            new StubBackupArtifactUploader(BackupDestinationType.LocalDevice, shouldFail: false),
+            new StubBackupArtifactUploader(BackupDestinationType.AzureBlobStorage, shouldFail: false)
+        };
+
+        var executor = new AzureSqlBackupExecutor(exporter, uploaders);
+
+        var job = new BackupJob
+        {
+            Id = Guid.NewGuid(),
+            JobType = JobType.AzureSqlDatabaseBackup
+        };
+
+        var localDestination = new AzureSqlBackupDestination
+        {
+            Id = Guid.NewGuid(),
+            DestinationType = BackupDestinationType.LocalDevice,
+            Target = "C:\\backups"
+        };
+
+        var blobDestination = new AzureSqlBackupDestination
+        {
+            Id = Guid.NewGuid(),
+            DestinationType = BackupDestinationType.AzureBlobStorage,
+            Target = "archive-container"
+        };
+
+        var azureSqlJob = new AzureSqlBackupJob
+        {
+            JobId = job.Id,
+            DatabaseName = "db",
+            Destinations =
+            {
+                localDestination,
+                blobDestination
+            },
+            WorkflowActions =
+            {
+                new AzureSqlBackupWorkflowAction
+                {
+                    Id = Guid.NewGuid(),
+                    StepOrder = 1,
+                    ActionType = AzureSqlWorkflowActionType.AzureSqlExportToDestination,
+                    AzureSqlBackupDestinationId = blobDestination.Id
+                }
+            }
+        };
+
+        var result = await executor.ExecuteAsync(job, azureSqlJob);
+
+        Assert.Equal(1, result.FilesScanned);
+        Assert.Equal(1, result.FilesCopied);
+        Assert.Equal(0, result.FilesFailed);
+    }
+
     private sealed class StubAzureSqlBacpacExporter : IAzureSqlBacpacExporter
     {
         public Task<string> ExportAsync(BackupJob job, AzureSqlBackupJob azureSqlBackupJob, CancellationToken cancellationToken = default)
