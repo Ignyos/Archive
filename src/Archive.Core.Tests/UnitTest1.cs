@@ -123,6 +123,95 @@ public class GlobMatcherTests
     }
 }
 
+public class IgnoreRuleMatcherTests
+{
+    [Fact]
+    public void IsIgnored_Supports_Basic_Ignore_Syntax()
+    {
+        var rules = IgnoreRuleMatcher.NormalizeRules([
+            "# comment",
+            "",
+            "bin/",
+            "*.tmp",
+            "!keep.tmp"
+        ]);
+
+        Assert.True(IgnoreRuleMatcher.IsIgnored("src/bin/a.txt", rules));
+        Assert.True(IgnoreRuleMatcher.IsIgnored("cache/file.tmp", rules));
+        Assert.False(IgnoreRuleMatcher.IsIgnored("cache/keep.tmp", rules));
+    }
+
+    [Fact]
+    public void IsIgnored_Matches_Segment_Rules_Without_Path_Separator()
+    {
+        var rules = IgnoreRuleMatcher.NormalizeRules(["node_modules"]);
+
+        Assert.True(IgnoreRuleMatcher.IsIgnored("src/node_modules/pkg/index.js", rules));
+        Assert.False(IgnoreRuleMatcher.IsIgnored("src/modules/pkg/index.js", rules));
+    }
+}
+
+public class IgnoreRuleSuggestionServiceTests
+{
+    [Fact]
+    public void BuildSuggestions_Returns_Relative_First_When_Path_Is_Under_Source()
+    {
+        var source = "C:\\Data\\Source";
+        var failedPath = "C:\\Data\\Source\\System Volume Information\\tracking.log";
+
+        var suggestions = IgnoreRuleSuggestionService.BuildSuggestions(source, failedPath, "Access to the path is denied");
+
+        Assert.NotEmpty(suggestions);
+        Assert.Equal("System Volume Information/tracking.log", suggestions[0].Rule);
+    }
+
+    [Fact]
+    public void BuildSuggestions_Returns_FileName_When_Path_Is_Outside_Source()
+    {
+        var source = "C:\\Data\\Source";
+        var failedPath = "D:\\Other\\cache.tmp";
+
+        var suggestions = IgnoreRuleSuggestionService.BuildSuggestions(source, failedPath, "Access to the path is denied");
+
+        Assert.NotEmpty(suggestions);
+        Assert.Equal("cache.tmp", suggestions[0].Rule);
+    }
+
+    [Fact]
+    public void BuildSuggestions_Uses_Directory_Rule_When_Error_Indicates_Directory()
+    {
+        var source = "C:\\Data\\Source";
+        var failedPath = "C:\\Data\\Source\\Protected";
+
+        var suggestions = IgnoreRuleSuggestionService.BuildSuggestions(source, failedPath, "Access to the directory is denied");
+
+        Assert.NotEmpty(suggestions);
+        Assert.Equal("Protected/", suggestions[0].Rule);
+        Assert.Equal("Ignore this folder", suggestions[0].Strategy);
+    }
+
+    [Fact]
+    public void BuildSuggestions_Includes_Cluster_Option_When_Failures_Share_Extension()
+    {
+        var source = "C:\\Data\\Source";
+        var failedPath = "C:\\Data\\Source\\A\\first.tmp";
+        var failedPaths = new[]
+        {
+            "C:\\Data\\Source\\A\\first.tmp",
+            "C:\\Data\\Source\\B\\second.tmp",
+            "C:\\Data\\Source\\C\\third.log"
+        };
+
+        var suggestions = IgnoreRuleSuggestionService.BuildSuggestions(
+            source,
+            failedPath,
+            "Access to the path is denied",
+            failedPaths);
+
+        Assert.Contains(suggestions, x => x.Rule == "*.tmp");
+    }
+}
+
 public class JobExecutionServiceTests
 {
     [Fact]
@@ -268,6 +357,75 @@ public class JobExecutionServiceTests
 
         Assert.Equal(JobExecutionStatus.CompletedWithWarnings, execution.Status);
         Assert.Equal(1, execution.WarningCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Persists_OperationLogs_From_SyncResult()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var job = new BackupJob
+        {
+            Id = Guid.NewGuid(),
+            SourcePath = "C:\\Source",
+            DestinationPath = "D:\\Destination",
+            Enabled = true,
+            SyncMode = SyncMode.Incremental,
+            ComparisonMethod = ComparisonMethod.Fast,
+            OverwriteBehavior = OverwriteBehavior.AlwaysOverwrite,
+            TriggerType = TriggerType.Manual,
+            CreatedAt = DateTime.UtcNow,
+            ModifiedAt = DateTime.UtcNow
+        };
+        context.BackupJobs.Add(job);
+        await context.SaveChangesAsync();
+
+        var timestamp = DateTime.UtcNow;
+        var syncEngine = new StubSyncEngine(new SyncResult
+        {
+            FilesScanned = 2,
+            FilesCopied = 1,
+            FilesSkipped = 1,
+            BytesTransferred = 10,
+            OperationLogs =
+            [
+                new SyncOperationLog(
+                    timestamp,
+                    LogLevel.Info,
+                    "Copied file.",
+                    "C:\\Source\\a.txt",
+                    OperationType.Copy),
+                new SyncOperationLog(
+                    timestamp.AddSeconds(1),
+                    LogLevel.Info,
+                    "Skipped excluded file.",
+                    "C:\\Source\\b.tmp",
+                    OperationType.Skip)
+            ]
+        });
+
+        var service = new JobExecutionService(context, syncEngine);
+        var execution = await service.ExecuteAsync(job.Id);
+
+        Assert.Equal(2, execution.Logs.Count);
+        Assert.Contains(execution.Logs, x =>
+            x.Level == LogLevel.Info &&
+            x.OperationType == OperationType.Copy &&
+            x.FilePath == "C:\\Source\\a.txt" &&
+            x.Message == "Copied file.");
+        Assert.Contains(execution.Logs, x =>
+            x.Level == LogLevel.Info &&
+            x.OperationType == OperationType.Skip &&
+            x.FilePath == "C:\\Source\\b.tmp" &&
+            x.Message == "Skipped excluded file.");
     }
 
     [Fact]
@@ -451,6 +609,64 @@ public class JobExecutionServiceTests
         Assert.Contains("Simulated failure", published[1].DetailSummary);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_Loads_ExclusionPatterns_For_SyncEngine()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var jobId = Guid.NewGuid();
+        var patternId = Guid.NewGuid();
+
+        context.BackupJobs.Add(new BackupJob
+        {
+            Id = jobId,
+            Name = "Pattern Load",
+            SourcePath = "C:\\Source",
+            DestinationPath = "D:\\Destination",
+            Enabled = true,
+            SyncMode = SyncMode.Incremental,
+            ComparisonMethod = ComparisonMethod.Fast,
+            OverwriteBehavior = OverwriteBehavior.AlwaysOverwrite,
+            TriggerType = TriggerType.Manual,
+            CreatedAt = DateTime.UtcNow,
+            ModifiedAt = DateTime.UtcNow
+        });
+
+        context.ExclusionPatterns.Add(new ExclusionPattern
+        {
+            Id = patternId,
+            Name = "Temp",
+            Pattern = "*.tmp",
+            IsGlobal = false,
+            IsSystemSuggestion = false
+        });
+
+        context.BackupJobExclusionPatterns.Add(new BackupJobExclusionPattern
+        {
+            BackupJobId = jobId,
+            ExclusionPatternId = patternId
+        });
+
+        await context.SaveChangesAsync();
+
+        var syncEngine = new CapturingSyncEngine();
+        var service = new JobExecutionService(context, syncEngine);
+
+        await service.ExecuteAsync(jobId);
+
+        Assert.NotNull(syncEngine.LastJob);
+        Assert.Single(syncEngine.LastJob!.BackupJobExclusionPatterns);
+        Assert.Equal("*.tmp", syncEngine.LastJob.BackupJobExclusionPatterns.First().ExclusionPattern?.Pattern);
+    }
+
     private sealed class StubSyncEngine : ISyncEngine
     {
         private readonly SyncResult _result;
@@ -471,6 +687,21 @@ public class JobExecutionServiceTests
         public Task<SyncResult> ExecuteAsync(BackupJob job, CancellationToken cancellationToken = default)
         {
             throw new InvalidOperationException("Simulated failure");
+        }
+    }
+
+    private sealed class CapturingSyncEngine : ISyncEngine
+    {
+        public BackupJob? LastJob { get; private set; }
+
+        public Task<SyncResult> ExecuteAsync(BackupJob job, CancellationToken cancellationToken = default)
+        {
+            LastJob = job;
+            return Task.FromResult(new SyncResult
+            {
+                FilesScanned = 0,
+                FilesSkipped = 0
+            });
         }
     }
 }
@@ -933,5 +1164,72 @@ public class ExecutionLogRetentionServiceTests
 
         var appLogCount = await context.ApplicationLogs.AsNoTracking().CountAsync();
         Assert.Equal(1, appLogCount);
+    }
+}
+
+public class CredentialProfileServiceTests
+{
+    [Fact]
+    public async Task CreateAsync_Then_ListAsync_Returns_Profile_For_Future_Selection()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var service = new CredentialProfileService(context);
+
+        var profileId = await service.CreateAsync(
+            CredentialProviderType.AzureBlobStorage,
+            "Blob Account A",
+            "UseDevelopmentStorage=true;");
+
+        var allProfiles = await service.ListAsync(CredentialProviderType.AzureBlobStorage);
+
+        var profile = Assert.Single(allProfiles);
+        Assert.Equal(profileId, profile.Id);
+        Assert.Equal("Blob Account A", profile.Name);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_Allows_Changing_Name_And_Secret_For_Existing_Profile()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var profileService = new CredentialProfileService(context);
+
+        var profileId = await profileService.CreateAsync(
+            CredentialProviderType.AzureBlobStorage,
+            "Blob Account A",
+            "UseDevelopmentStorage=true;");
+
+        var updated = await profileService.UpdateAsync(
+            profileId,
+            "Blob Account B",
+            "DefaultEndpointsProtocol=https;AccountName=archive;AccountKey=abc=;EndpointSuffix=core.windows.net");
+
+        Assert.True(updated);
+
+        var secretStore = new DpapiSecretStore(context);
+        var secret = await secretStore.GetSecretAsync(profileId.ToString());
+        Assert.NotNull(secret);
+        Assert.Contains("AccountName=archive", secret, StringComparison.Ordinal);
+
+        var allProfiles = await profileService.ListAsync(CredentialProviderType.AzureBlobStorage);
+        var profile = Assert.Single(allProfiles);
+        Assert.Equal("Blob Account B", profile.Name);
     }
 }

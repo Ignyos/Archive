@@ -3,6 +3,7 @@ using System;
 using Archive.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Archive.Infrastructure.Migrations
 {
     [DbContext(typeof(ArchiveDbContext))]
-    partial class ArchiveDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260304002640_AddAzureSqlWorkflowActions")]
+    partial class AddAzureSqlWorkflowActions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.0");
@@ -59,6 +62,93 @@ namespace Archive.Infrastructure.Migrations
                     b.HasIndex("TimestampUtc");
 
                     b.ToTable("ApplicationLogs");
+                });
+
+            modelBuilder.Entity("Archive.Core.Domain.Entities.AzureSqlBackupDestination", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AccountOrDriveIdentifier")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("AzureSqlBackupJobId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CredentialsSecretReference")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DestinationType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AzureSqlBackupJobId");
+
+                    b.ToTable("AzureSqlBackupDestinations");
+                });
+
+            modelBuilder.Entity("Archive.Core.Domain.Entities.AzureSqlBackupJob", b =>
+                {
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CredentialsSecretReference")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DatabaseName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResourceGroupName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ServerName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SubscriptionId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("JobId");
+
+                    b.ToTable("AzureSqlBackupJobs");
+                });
+
+            modelBuilder.Entity("Archive.Core.Domain.Entities.AzureSqlBackupWorkflowAction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ActionType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("AzureSqlBackupDestinationId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("AzureSqlBackupJobId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ConfigurationJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("StepOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AzureSqlBackupDestinationId");
+
+                    b.HasIndex("AzureSqlBackupJobId", "StepOrder")
+                        .IsUnique();
+
+                    b.ToTable("AzureSqlBackupWorkflowActions");
                 });
 
             modelBuilder.Entity("Archive.Core.Domain.Entities.BackupJob", b =>
@@ -328,6 +418,46 @@ namespace Archive.Infrastructure.Migrations
                     b.ToTable("SyncOptions");
                 });
 
+            modelBuilder.Entity("Archive.Core.Domain.Entities.AzureSqlBackupDestination", b =>
+                {
+                    b.HasOne("Archive.Core.Domain.Entities.AzureSqlBackupJob", "AzureSqlBackupJob")
+                        .WithMany("Destinations")
+                        .HasForeignKey("AzureSqlBackupJobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AzureSqlBackupJob");
+                });
+
+            modelBuilder.Entity("Archive.Core.Domain.Entities.AzureSqlBackupJob", b =>
+                {
+                    b.HasOne("Archive.Core.Domain.Entities.BackupJob", "Job")
+                        .WithOne("AzureSqlBackupJob")
+                        .HasForeignKey("Archive.Core.Domain.Entities.AzureSqlBackupJob", "JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Job");
+                });
+
+            modelBuilder.Entity("Archive.Core.Domain.Entities.AzureSqlBackupWorkflowAction", b =>
+                {
+                    b.HasOne("Archive.Core.Domain.Entities.AzureSqlBackupDestination", "AzureSqlBackupDestination")
+                        .WithMany()
+                        .HasForeignKey("AzureSqlBackupDestinationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Archive.Core.Domain.Entities.AzureSqlBackupJob", "AzureSqlBackupJob")
+                        .WithMany("WorkflowActions")
+                        .HasForeignKey("AzureSqlBackupJobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AzureSqlBackupDestination");
+
+                    b.Navigation("AzureSqlBackupJob");
+                });
+
             modelBuilder.Entity("Archive.Core.Domain.Entities.BackupJob", b =>
                 {
                     b.HasOne("Archive.Core.Domain.Entities.SyncOptions", "SyncOptions")
@@ -378,8 +508,17 @@ namespace Archive.Infrastructure.Migrations
                     b.Navigation("Job");
                 });
 
+            modelBuilder.Entity("Archive.Core.Domain.Entities.AzureSqlBackupJob", b =>
+                {
+                    b.Navigation("Destinations");
+
+                    b.Navigation("WorkflowActions");
+                });
+
             modelBuilder.Entity("Archive.Core.Domain.Entities.BackupJob", b =>
                 {
+                    b.Navigation("AzureSqlBackupJob");
+
                     b.Navigation("BackupJobExclusionPatterns");
 
                     b.Navigation("Executions");

@@ -33,6 +33,8 @@ public sealed class JobExecutionService : IJobExecutionService
     {
         var job = await _dbContext.BackupJobs
             .Include(x => x.SyncOptions)
+            .Include(x => x.BackupJobExclusionPatterns)
+            .ThenInclude(x => x.ExclusionPattern)
             .FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
 
         if (job is null)
@@ -40,11 +42,14 @@ public sealed class JobExecutionService : IJobExecutionService
             throw new InvalidOperationException($"BackupJob {jobId} not found.");
         }
 
+        var isManualDirectorySyncRun = job.TriggerType == TriggerType.Manual && job.JobType == JobType.DirectorySync;
+
         JobExecutionNotificationHub.Publish(new JobExecutionNotificationEvent
         {
             JobId = job.Id,
             JobName = string.IsNullOrWhiteSpace(job.Name) ? "(unnamed)" : job.Name,
             Kind = JobExecutionNotificationKind.Started,
+            IsManualRun = isManualDirectorySyncRun,
             NotifyOnStartOverride = job.NotifyOnStart,
             NotifyOnCompleteOverride = job.NotifyOnComplete,
             NotifyOnFailOverride = job.NotifyOnFail
@@ -60,7 +65,7 @@ public sealed class JobExecutionService : IJobExecutionService
 
         try
         {
-            var result = await _syncEngine.ExecuteAsync(job, cancellationToken);
+            var result = await ExecuteByJobTypeAsync(job, cancellationToken);
 
             execution.Status = result.WarningCount > 0 || result.ErrorCount > 0 || result.FilesFailed > 0
                 ? JobExecutionStatus.CompletedWithWarnings
@@ -76,6 +81,21 @@ public sealed class JobExecutionService : IJobExecutionService
             execution.BytesTransferred = result.BytesTransferred;
             execution.ErrorCount = result.ErrorCount;
             execution.WarningCount = result.WarningCount;
+
+            foreach (var operationLog in result.OperationLogs)
+            {
+                execution.Logs.Add(new ExecutionLog
+                {
+                    Id = Guid.NewGuid(),
+                    JobExecutionId = execution.Id,
+                    Timestamp = operationLog.Timestamp,
+                    Level = operationLog.Level,
+                    Message = operationLog.Message,
+                    FilePath = operationLog.FilePath,
+                    OperationType = operationLog.OperationType,
+                    ExceptionDetails = operationLog.ExceptionDetails
+                });
+            }
         }
         catch (Exception ex)
         {
@@ -115,6 +135,7 @@ public sealed class JobExecutionService : IJobExecutionService
             ErrorCount = execution.ErrorCount,
             FilesFailed = execution.FilesFailed,
             DetailSummary = detailSummary,
+            IsManualRun = isManualDirectorySyncRun,
             NotifyOnStartOverride = job.NotifyOnStart,
             NotifyOnCompleteOverride = job.NotifyOnComplete,
             NotifyOnFailOverride = job.NotifyOnFail
@@ -132,6 +153,16 @@ public sealed class JobExecutionService : IJobExecutionService
         }
 
         return execution;
+    }
+
+    private Task<SyncResult> ExecuteByJobTypeAsync(BackupJob job, CancellationToken cancellationToken)
+    {
+        if (job.JobType != JobType.DirectorySync)
+        {
+            throw new InvalidOperationException($"Unsupported job type '{job.JobType}'.");
+        }
+
+        return _syncEngine.ExecuteAsync(job, cancellationToken);
     }
 
     private async Task<string?> BuildDetailSummaryAsync(Guid executionId, CancellationToken cancellationToken)

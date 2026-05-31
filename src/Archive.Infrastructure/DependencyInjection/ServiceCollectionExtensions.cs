@@ -31,6 +31,9 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<IJobExecutionService, JobExecutionService>();
         services.AddScoped<ISyncEngine, FileSystemSyncEngine>();
+        services.AddScoped<ISourceScanStateStore, AppSettingSourceScanStateStore>();
+        services.AddScoped<ISecretStore, DpapiSecretStore>();
+        services.AddScoped<ICredentialProfileService, CredentialProfileService>();
         services.AddScoped<IExecutionLogRetentionService, ExecutionLogRetentionService>();
         services.AddScoped<IJobSchedulerService, JobSchedulerService>();
         services.AddScoped<IBackupJobStateService, BackupJobStateService>();

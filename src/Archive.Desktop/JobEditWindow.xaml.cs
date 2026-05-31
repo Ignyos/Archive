@@ -3,6 +3,7 @@ using System.IO;
 using Archive.Core.Domain.Enums;
 using Archive.Core.Domain.Entities;
 using Archive.Core.Jobs;
+using Archive.Core.Sync;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Forms = System.Windows.Forms;
@@ -38,6 +39,7 @@ public partial class JobEditWindow : Window
         DescriptionTextBox.Text = string.Empty;
         SourcePathTextBox.Text = string.Empty;
         DestinationPathTextBox.Text = string.Empty;
+        IgnoreRulesTextBox.Text = string.Empty;
         TriggerTypeComboBox.SelectedItem = TriggerType.Manual;
         InitializeRecurringControls(null);
         OneTimeDatePicker.SelectedDate = DateTime.Now.AddDays(1).Date;
@@ -53,6 +55,7 @@ public partial class JobEditWindow : Window
         EnabledCheckBox.IsChecked = true;
         Title = "New Job";
         HeaderTextBlock.Text = "New Job";
+        ConfigureDirectorySyncUi();
         RefreshSchedulingUi();
     }
 
@@ -69,6 +72,7 @@ public partial class JobEditWindow : Window
         DescriptionTextBox.Text = selectedJob.Description ?? string.Empty;
         SourcePathTextBox.Text = selectedJob.SourcePath;
         DestinationPathTextBox.Text = selectedJob.DestinationPath;
+        IgnoreRulesTextBox.Text = LoadIgnoreRulesText(selectedJob.Id);
         TriggerTypeComboBox.ItemsSource = Enum.GetValues<TriggerType>();
         TriggerTypeComboBox.SelectedItem = selectedJob.TriggerType;
 
@@ -93,6 +97,7 @@ public partial class JobEditWindow : Window
         EnabledCheckBox.IsChecked = selectedJob.Enabled;
         Title = $"Edit Job - {selectedJob.Name}";
         HeaderTextBlock.Text = "Edit Job";
+        ConfigureDirectorySyncUi();
         RefreshSchedulingUi();
     }
 
@@ -118,6 +123,9 @@ public partial class JobEditWindow : Window
         }
 
         var sourcePath = SourcePathTextBox.Text.Trim();
+        var destinationPath = DestinationPathTextBox.Text.Trim();
+        var ignoreRules = ParseIgnoreRulesFromEditor();
+
         if (string.IsNullOrWhiteSpace(sourcePath))
         {
             ValidationTextBlock.Text = "Source path is required.";
@@ -130,7 +138,6 @@ public partial class JobEditWindow : Window
             return;
         }
 
-        var destinationPath = DestinationPathTextBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(destinationPath))
         {
             ValidationTextBlock.Text = "Destination path is required.";
@@ -140,6 +147,21 @@ public partial class JobEditWindow : Window
         if (!Directory.Exists(destinationPath))
         {
             ValidationTextBlock.Text = "Destination path must be an existing accessible directory.";
+            return;
+        }
+
+        if (string.Equals(
+                sourcePath.TrimEnd('\\', '/'),
+                destinationPath.TrimEnd('\\', '/'),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            ValidationTextBlock.Text = "Source and destination cannot be the same path.";
+            return;
+        }
+
+        if (IsDestinationNestedWithinSource(sourcePath, destinationPath))
+        {
+            ValidationTextBlock.Text = "Destination cannot be inside the source path.";
             return;
         }
 
@@ -187,21 +209,6 @@ public partial class JobEditWindow : Window
                 break;
         }
 
-        if (string.Equals(
-                sourcePath.TrimEnd('\\', '/'),
-                destinationPath.TrimEnd('\\', '/'),
-                StringComparison.OrdinalIgnoreCase))
-        {
-            ValidationTextBlock.Text = "Source and destination cannot be the same path.";
-            return;
-        }
-
-        if (IsDestinationNestedWithinSource(sourcePath, destinationPath))
-        {
-            ValidationTextBlock.Text = "Destination cannot be inside the source path.";
-            return;
-        }
-
         try
         {
             using var scope = App.Services.CreateScope();
@@ -223,8 +230,8 @@ public partial class JobEditWindow : Window
             }
 
             var saved = _isCreateMode
-                ? await CreateJobAsync(dbContext, name, sourcePath, destinationPath, triggerType, cronExpression, simpleTriggerTime)
-                : await UpdateJobAsync(scope.ServiceProvider, name, sourcePath, destinationPath, triggerType, cronExpression, simpleTriggerTime);
+                ? await CreateJobAsync(dbContext, name, sourcePath, destinationPath, triggerType, cronExpression, simpleTriggerTime, ignoreRules)
+                : await UpdateJobAsync(scope.ServiceProvider, dbContext, name, sourcePath, destinationPath, triggerType, cronExpression, simpleTriggerTime, ignoreRules);
 
             if (!saved)
             {
@@ -237,7 +244,7 @@ public partial class JobEditWindow : Window
             DialogResult = true;
             Close();
         }
-        catch(Exception ex)
+        catch(Exception)
         {
             ValidationTextBlock.Text = "Unable to save changes. Check logs for details.";
         }
@@ -245,15 +252,17 @@ public partial class JobEditWindow : Window
 
     private async Task<bool> UpdateJobAsync(
         IServiceProvider serviceProvider,
+        Archive.Infrastructure.Persistence.ArchiveDbContext dbContext,
         string name,
         string sourcePath,
         string destinationPath,
         TriggerType triggerType,
         string? cronExpression,
-        DateTime? simpleTriggerTime)
+        DateTime? simpleTriggerTime,
+        IReadOnlyList<string> ignoreRules)
     {
         var backupJobStateService = serviceProvider.GetRequiredService<IBackupJobStateService>();
-        return await backupJobStateService.UpdateBasicFieldsAsync(
+        var updated = await backupJobStateService.UpdateBasicFieldsAsync(
             _jobId,
             name,
             DescriptionTextBox.Text,
@@ -267,6 +276,14 @@ public partial class JobEditWindow : Window
             deleteOrphaned: DeleteOrphanedCheckBox.IsChecked ?? false,
             skipHiddenAndSystem: SkipHiddenAndSystemCheckBox.IsChecked ?? true,
             verifyAfterCopy: VerifyAfterCopyCheckBox.IsChecked ?? false);
+
+        if (!updated)
+        {
+            return false;
+        }
+
+        await SaveIgnoreRulesAsync(dbContext, _jobId, ignoreRules);
+        return true;
     }
 
     private async Task<bool> CreateJobAsync(
@@ -276,7 +293,8 @@ public partial class JobEditWindow : Window
         string destinationPath,
         TriggerType triggerType,
         string? cronExpression,
-        DateTime? simpleTriggerTime)
+        DateTime? simpleTriggerTime,
+        IReadOnlyList<string> ignoreRules)
     {
         var now = DateTime.UtcNow;
 
@@ -298,6 +316,7 @@ public partial class JobEditWindow : Window
         var job = new BackupJob
         {
             Id = _jobId,
+            JobType = JobType.DirectorySync,
             Name = name,
             Description = DescriptionTextBox.Text,
             SourcePath = sourcePath,
@@ -314,6 +333,8 @@ public partial class JobEditWindow : Window
             CreatedAt = now,
             ModifiedAt = now
         };
+
+        ApplyIgnoreRules(job, ignoreRules);
 
         dbContext.SyncOptions.Add(syncOptions);
         dbContext.BackupJobs.Add(job);
@@ -828,9 +849,134 @@ public partial class JobEditWindow : Window
                 DeleteOrphaned = DeleteOrphanedCheckBox.IsChecked ?? false,
                 SkipHiddenAndSystem = SkipHiddenAndSystemCheckBox.IsChecked ?? true,
                 VerifyAfterCopy = VerifyAfterCopyCheckBox.IsChecked ?? false
-            }
+            },
+            BackupJobExclusionPatterns = ParseIgnoreRulesFromEditor()
+                .Select((pattern, index) => new BackupJobExclusionPattern
+                {
+                    ExclusionPattern = new ExclusionPattern
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = $"Rule {index + 1}",
+                        Pattern = pattern,
+                        IsGlobal = false,
+                        IsSystemSuggestion = false
+                    }
+                })
+                .ToList()
         };
 
         return true;
+    }
+
+    private void ConfigureDirectorySyncUi()
+    {
+        OptionsLabelTextBlock.Text = "Sync Options";
+        SyncOptionsPanel.Visibility = Visibility.Visible;
+
+        SourceLabelTextBlock.Text = "Source";
+        DestinationLabelTextBlock.Text = "Destination";
+
+        BrowseSourceFolderButton.Visibility = Visibility.Visible;
+        BrowseDestinationFolderButton.Visibility = Visibility.Visible;
+
+        SourcePathTextBox.ToolTip = null;
+        DestinationPathTextBox.ToolTip = null;
+
+        PreviewOperationsButton.IsEnabled = true;
+        PreviewOperationsButton.ToolTip = null;
+    }
+
+    private IReadOnlyList<string> ParseIgnoreRulesFromEditor()
+    {
+        return ParseIgnoreRules(IgnoreRulesTextBox.Text);
+    }
+
+    private static IReadOnlyList<string> ParseIgnoreRules(string? text)
+    {
+        return IgnoreRuleMatcher.NormalizeRules((text ?? string.Empty)
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim()))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private string LoadIgnoreRulesText(Guid jobId)
+    {
+        try
+        {
+            using var scope = App.Services.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<Archive.Infrastructure.Persistence.ArchiveDbContext>();
+
+            var patterns = dbContext.BackupJobExclusionPatterns
+                .AsNoTracking()
+                .Where(x => x.BackupJobId == jobId)
+                .Include(x => x.ExclusionPattern)
+                .Select(x => x.ExclusionPattern != null ? x.ExclusionPattern.Pattern : null)
+                .Where(x => x != null)
+                .Cast<string>()
+                .OrderBy(x => x)
+                .ToList();
+
+            return string.Join(Environment.NewLine, patterns);
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static void ApplyIgnoreRules(BackupJob job, IReadOnlyList<string> ignoreRules)
+    {
+        foreach (var pattern in ignoreRules)
+        {
+            var exclusionPatternId = Guid.NewGuid();
+            job.BackupJobExclusionPatterns.Add(new BackupJobExclusionPattern
+            {
+                BackupJobId = job.Id,
+                ExclusionPatternId = exclusionPatternId,
+                ExclusionPattern = new ExclusionPattern
+                {
+                    Id = exclusionPatternId,
+                    Name = "Job Ignore Rule",
+                    Pattern = pattern,
+                    IsGlobal = false,
+                    IsSystemSuggestion = false
+                }
+            });
+        }
+    }
+
+    private static async Task SaveIgnoreRulesAsync(
+        Archive.Infrastructure.Persistence.ArchiveDbContext dbContext,
+        Guid jobId,
+        IReadOnlyList<string> ignoreRules)
+    {
+        var existingLinks = await dbContext.BackupJobExclusionPatterns
+            .Where(x => x.BackupJobId == jobId)
+            .ToListAsync();
+
+        dbContext.BackupJobExclusionPatterns.RemoveRange(existingLinks);
+
+        foreach (var pattern in ignoreRules)
+        {
+            var exclusionPattern = new ExclusionPattern
+            {
+                Id = Guid.NewGuid(),
+                Name = "Job Ignore Rule",
+                Pattern = pattern,
+                IsGlobal = false,
+                IsSystemSuggestion = false
+            };
+
+            dbContext.ExclusionPatterns.Add(exclusionPattern);
+            dbContext.BackupJobExclusionPatterns.Add(new BackupJobExclusionPattern
+            {
+                BackupJobId = jobId,
+                ExclusionPatternId = exclusionPattern.Id,
+                ExclusionPattern = exclusionPattern
+            });
+        }
+
+        await dbContext.SaveChangesAsync();
     }
 }

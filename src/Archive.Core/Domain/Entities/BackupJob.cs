@@ -6,6 +6,8 @@ public sealed class BackupJob
 {
     public Guid Id { get; set; }
 
+    public JobType JobType { get; set; } = JobType.DirectorySync;
+
     public string? Name { get; set; }
 
     public string? Description { get; set; }

@@ -200,6 +200,31 @@ main {
   border-radius: 8px;
 }
 
+.version-selector {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.version-selector select {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 220px;
+}
+
+.version-guide {
+  display: block;
+}
+
+.version-guide[hidden] {
+  display: none;
+}
+
 code {
   background: var(--surface-2);
   border: 1px solid var(--border);

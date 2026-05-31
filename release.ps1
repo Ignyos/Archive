@@ -91,7 +91,9 @@ function Build-LocalInstaller {
     Write-Host "Cleaning up build artifacts..." -ForegroundColor $InfoColor
     if (Test-Path "publish") { Remove-Item "publish" -Recurse -Force }
     
-    Write-Host "`nInstaller created successfully: installer\$installerName.exe" -ForegroundColor $SuccessColor
+    $installerPath = "installer\$installerName.exe"
+    Write-Host "`nInstaller created successfully: $installerPath" -ForegroundColor $SuccessColor
+    return $installerPath
 }
 
 function Revert-VersionChange {
@@ -244,7 +246,8 @@ catch {
 # Build installer
 Write-Host "`nBuilding installer..." -ForegroundColor $InfoColor
 try {
-    Build-LocalInstaller -Version $newVersion -IsDevBuild $false
+    $isLocalNonMainBuild = -not $isMainBranch
+    $installerPath = Build-LocalInstaller -Version $newVersion -IsDevBuild $isLocalNonMainBuild
 }
 catch {
     Write-Host "Build failed: $_" -ForegroundColor $ErrorColor
@@ -284,7 +287,8 @@ if ($isMainBranch) {
     Write-Host "GitHub Actions will build and publish the release." -ForegroundColor $InfoColor
 }
 else {
-    Write-Host "`nChanges committed locally (no tag created - not on main branch)" -ForegroundColor $SuccessColor
+    Write-Host "`nChanges committed locally (no tag created - not on main branch)." -ForegroundColor $SuccessColor
+    Write-Host "Local installer output: $installerPath" -ForegroundColor $InfoColor
 }
 
 Write-Host "`nDone!" -ForegroundColor $SuccessColor

@@ -8,6 +8,18 @@ The project uses a dual-mode release script (`release.ps1`) that supports both:
 - **Development builds** - Local testing with timestamped installers
 - **Release builds** - Versioned releases with git tags and GitHub integration
 
+### Two Installer Paths
+
+1. **Official release path (main branch only)**
+   - Uses fixed installer name: `ArchiveSetup.exe`
+   - Creates and pushes git tag `vX.Y.Z`
+   - GitHub Actions builds and publishes the release
+
+2. **Branch/local path (any non-main branch)**
+   - Uses timestamped installer name: `ArchiveSetup_YYYY-MM-DD-HH-mm.exe`
+   - Does **not** create or push a release tag
+   - Installer is stored locally in `installer/`
+
 ## Git Workflow
 
 ### Branch Strategy
@@ -95,6 +107,15 @@ Use this when ready to publish a new version.
    - Creates the installer
    - Reads `RELEASE_NOTES.txt` from the repository
    - Creates a GitHub Release with the installer and your custom release notes
+
+### Versioned Builds on Non-Main Branches
+
+If you run `release.ps1` on a non-main branch and enter a new version:
+
+- The script still builds and commits locally
+- **No git tag is created**
+- **No GitHub release is triggered**
+- Installer output is local and timestamped: `ArchiveSetup_YYYY-MM-DD-HH-mm.exe`
 
 ## Release Script Details
 
