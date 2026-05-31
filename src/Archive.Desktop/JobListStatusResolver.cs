@@ -15,19 +15,18 @@ public static class JobListStatusResolver
             return "Running";
         }
 
-        if (latestExecutionStatus == JobExecutionStatus.Running)
+        if (latestExecutionStatus.HasValue)
         {
-            return "Running";
-        }
-
-        if (latestExecutionStatus == JobExecutionStatus.CompletedWithWarnings)
-        {
-            return "Warning";
-        }
-
-        if (latestExecutionStatus == JobExecutionStatus.Failed)
-        {
-            return "Error";
+            return latestExecutionStatus.Value switch
+            {
+                JobExecutionStatus.Running => "Running",
+                JobExecutionStatus.Validating => "Validating",
+                JobExecutionStatus.CompletedWithWarnings => "Warning",
+                JobExecutionStatus.Failed => "Error",
+                JobExecutionStatus.Completed => "Completed",
+                JobExecutionStatus.Cancelled => "Cancelled",
+                _ => latestExecutionStatus.Value.ToString()
+            };
         }
 
         var isScheduled = enabled && triggerType != TriggerType.Manual;

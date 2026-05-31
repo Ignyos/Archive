@@ -5,6 +5,7 @@ namespace Archive.Core.Jobs;
 public enum JobExecutionNotificationKind
 {
     Started,
+    Progress,
     Completed,
     Failed
 }
@@ -32,6 +33,12 @@ public sealed class JobExecutionNotificationEvent
     public bool? NotifyOnCompleteOverride { get; init; }
 
     public bool? NotifyOnFailOverride { get; init; }
+
+    public bool IsManualRun { get; init; }
+
+    public long? ProgressTotalBytes { get; init; }
+
+    public long? ProgressCompletedBytes { get; init; }
 }
 
 public static class JobExecutionNotificationHub

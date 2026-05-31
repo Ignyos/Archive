@@ -11,14 +11,12 @@ public sealed class JobExecutionService : IJobExecutionService
 {
     private readonly ArchiveDbContext _dbContext;
     private readonly ISyncEngine _syncEngine;
-    private readonly IAzureSqlBackupExecutor _azureSqlBackupExecutor;
     private readonly IExecutionLogRetentionService? _retentionService;
 
     public JobExecutionService(ArchiveDbContext dbContext, ISyncEngine syncEngine)
     {
         _dbContext = dbContext;
         _syncEngine = syncEngine;
-        _azureSqlBackupExecutor = new UnsupportedAzureSqlBackupExecutor();
     }
 
     public JobExecutionService(
@@ -28,19 +26,6 @@ public sealed class JobExecutionService : IJobExecutionService
     {
         _dbContext = dbContext;
         _syncEngine = syncEngine;
-        _azureSqlBackupExecutor = new UnsupportedAzureSqlBackupExecutor();
-        _retentionService = retentionService;
-    }
-
-    public JobExecutionService(
-        ArchiveDbContext dbContext,
-        ISyncEngine syncEngine,
-        IAzureSqlBackupExecutor azureSqlBackupExecutor,
-        IExecutionLogRetentionService retentionService)
-    {
-        _dbContext = dbContext;
-        _syncEngine = syncEngine;
-        _azureSqlBackupExecutor = azureSqlBackupExecutor;
         _retentionService = retentionService;
     }
 
@@ -48,11 +33,8 @@ public sealed class JobExecutionService : IJobExecutionService
     {
         var job = await _dbContext.BackupJobs
             .Include(x => x.SyncOptions)
-            .Include(x => x.AzureSqlBackupJob)
-                .ThenInclude(x => x!.Destinations)
-            .Include(x => x.AzureSqlBackupJob)
-                .ThenInclude(x => x!.WorkflowActions)
-                    .ThenInclude(x => x.AzureSqlBackupDestination)
+            .Include(x => x.BackupJobExclusionPatterns)
+            .ThenInclude(x => x.ExclusionPattern)
             .FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
 
         if (job is null)
@@ -60,11 +42,14 @@ public sealed class JobExecutionService : IJobExecutionService
             throw new InvalidOperationException($"BackupJob {jobId} not found.");
         }
 
+        var isManualDirectorySyncRun = job.TriggerType == TriggerType.Manual && job.JobType == JobType.DirectorySync;
+
         JobExecutionNotificationHub.Publish(new JobExecutionNotificationEvent
         {
             JobId = job.Id,
             JobName = string.IsNullOrWhiteSpace(job.Name) ? "(unnamed)" : job.Name,
             Kind = JobExecutionNotificationKind.Started,
+            IsManualRun = isManualDirectorySyncRun,
             NotifyOnStartOverride = job.NotifyOnStart,
             NotifyOnCompleteOverride = job.NotifyOnComplete,
             NotifyOnFailOverride = job.NotifyOnFail
@@ -96,6 +81,21 @@ public sealed class JobExecutionService : IJobExecutionService
             execution.BytesTransferred = result.BytesTransferred;
             execution.ErrorCount = result.ErrorCount;
             execution.WarningCount = result.WarningCount;
+
+            foreach (var operationLog in result.OperationLogs)
+            {
+                execution.Logs.Add(new ExecutionLog
+                {
+                    Id = Guid.NewGuid(),
+                    JobExecutionId = execution.Id,
+                    Timestamp = operationLog.Timestamp,
+                    Level = operationLog.Level,
+                    Message = operationLog.Message,
+                    FilePath = operationLog.FilePath,
+                    OperationType = operationLog.OperationType,
+                    ExceptionDetails = operationLog.ExceptionDetails
+                });
+            }
         }
         catch (Exception ex)
         {
@@ -135,6 +135,7 @@ public sealed class JobExecutionService : IJobExecutionService
             ErrorCount = execution.ErrorCount,
             FilesFailed = execution.FilesFailed,
             DetailSummary = detailSummary,
+            IsManualRun = isManualDirectorySyncRun,
             NotifyOnStartOverride = job.NotifyOnStart,
             NotifyOnCompleteOverride = job.NotifyOnComplete,
             NotifyOnFailOverride = job.NotifyOnFail
@@ -156,33 +157,12 @@ public sealed class JobExecutionService : IJobExecutionService
 
     private Task<SyncResult> ExecuteByJobTypeAsync(BackupJob job, CancellationToken cancellationToken)
     {
-        return job.JobType switch
+        if (job.JobType != JobType.DirectorySync)
         {
-            JobType.DirectorySync => _syncEngine.ExecuteAsync(job, cancellationToken),
-            JobType.AzureSqlDatabaseBackup => ExecuteAzureSqlBackupAsync(job, cancellationToken),
-            _ => throw new InvalidOperationException($"Unsupported job type '{job.JobType}'.")
-        };
-    }
-
-    private Task<SyncResult> ExecuteAzureSqlBackupAsync(BackupJob job, CancellationToken cancellationToken)
-    {
-        if (job.AzureSqlBackupJob is null)
-        {
-            throw new InvalidOperationException("Azure SQL backup job configuration is missing.");
+            throw new InvalidOperationException($"Unsupported job type '{job.JobType}'.");
         }
 
-        return _azureSqlBackupExecutor.ExecuteAsync(job, job.AzureSqlBackupJob, cancellationToken);
-    }
-
-    private sealed class UnsupportedAzureSqlBackupExecutor : IAzureSqlBackupExecutor
-    {
-        public Task<SyncResult> ExecuteAsync(
-            BackupJob job,
-            AzureSqlBackupJob azureSqlBackupJob,
-            CancellationToken cancellationToken = default)
-        {
-            throw new NotSupportedException("Azure SQL backup executor is not available in this execution context.");
-        }
+        return _syncEngine.ExecuteAsync(job, cancellationToken);
     }
 
     private async Task<string?> BuildDetailSummaryAsync(Guid executionId, CancellationToken cancellationToken)

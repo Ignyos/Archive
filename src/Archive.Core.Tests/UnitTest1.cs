@@ -123,6 +123,95 @@ public class GlobMatcherTests
     }
 }
 
+public class IgnoreRuleMatcherTests
+{
+    [Fact]
+    public void IsIgnored_Supports_Basic_Ignore_Syntax()
+    {
+        var rules = IgnoreRuleMatcher.NormalizeRules([
+            "# comment",
+            "",
+            "bin/",
+            "*.tmp",
+            "!keep.tmp"
+        ]);
+
+        Assert.True(IgnoreRuleMatcher.IsIgnored("src/bin/a.txt", rules));
+        Assert.True(IgnoreRuleMatcher.IsIgnored("cache/file.tmp", rules));
+        Assert.False(IgnoreRuleMatcher.IsIgnored("cache/keep.tmp", rules));
+    }
+
+    [Fact]
+    public void IsIgnored_Matches_Segment_Rules_Without_Path_Separator()
+    {
+        var rules = IgnoreRuleMatcher.NormalizeRules(["node_modules"]);
+
+        Assert.True(IgnoreRuleMatcher.IsIgnored("src/node_modules/pkg/index.js", rules));
+        Assert.False(IgnoreRuleMatcher.IsIgnored("src/modules/pkg/index.js", rules));
+    }
+}
+
+public class IgnoreRuleSuggestionServiceTests
+{
+    [Fact]
+    public void BuildSuggestions_Returns_Relative_First_When_Path_Is_Under_Source()
+    {
+        var source = "C:\\Data\\Source";
+        var failedPath = "C:\\Data\\Source\\System Volume Information\\tracking.log";
+
+        var suggestions = IgnoreRuleSuggestionService.BuildSuggestions(source, failedPath, "Access to the path is denied");
+
+        Assert.NotEmpty(suggestions);
+        Assert.Equal("System Volume Information/tracking.log", suggestions[0].Rule);
+    }
+
+    [Fact]
+    public void BuildSuggestions_Returns_FileName_When_Path_Is_Outside_Source()
+    {
+        var source = "C:\\Data\\Source";
+        var failedPath = "D:\\Other\\cache.tmp";
+
+        var suggestions = IgnoreRuleSuggestionService.BuildSuggestions(source, failedPath, "Access to the path is denied");
+
+        Assert.NotEmpty(suggestions);
+        Assert.Equal("cache.tmp", suggestions[0].Rule);
+    }
+
+    [Fact]
+    public void BuildSuggestions_Uses_Directory_Rule_When_Error_Indicates_Directory()
+    {
+        var source = "C:\\Data\\Source";
+        var failedPath = "C:\\Data\\Source\\Protected";
+
+        var suggestions = IgnoreRuleSuggestionService.BuildSuggestions(source, failedPath, "Access to the directory is denied");
+
+        Assert.NotEmpty(suggestions);
+        Assert.Equal("Protected/", suggestions[0].Rule);
+        Assert.Equal("Ignore this folder", suggestions[0].Strategy);
+    }
+
+    [Fact]
+    public void BuildSuggestions_Includes_Cluster_Option_When_Failures_Share_Extension()
+    {
+        var source = "C:\\Data\\Source";
+        var failedPath = "C:\\Data\\Source\\A\\first.tmp";
+        var failedPaths = new[]
+        {
+            "C:\\Data\\Source\\A\\first.tmp",
+            "C:\\Data\\Source\\B\\second.tmp",
+            "C:\\Data\\Source\\C\\third.log"
+        };
+
+        var suggestions = IgnoreRuleSuggestionService.BuildSuggestions(
+            source,
+            failedPath,
+            "Access to the path is denied",
+            failedPaths);
+
+        Assert.Contains(suggestions, x => x.Rule == "*.tmp");
+    }
+}
+
 public class JobExecutionServiceTests
 {
     [Fact]
@@ -271,7 +360,7 @@ public class JobExecutionServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_Fails_When_AzureSqlJobType_Has_No_Configuration()
+    public async Task ExecuteAsync_Persists_OperationLogs_From_SyncResult()
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
@@ -286,26 +375,57 @@ public class JobExecutionServiceTests
         var job = new BackupJob
         {
             Id = Guid.NewGuid(),
-            Name = "Azure SQL Backup",
-            SourcePath = "N/A",
-            DestinationPath = "N/A",
-            JobType = JobType.AzureSqlDatabaseBackup,
+            SourcePath = "C:\\Source",
+            DestinationPath = "D:\\Destination",
             Enabled = true,
+            SyncMode = SyncMode.Incremental,
+            ComparisonMethod = ComparisonMethod.Fast,
+            OverwriteBehavior = OverwriteBehavior.AlwaysOverwrite,
             TriggerType = TriggerType.Manual,
             CreatedAt = DateTime.UtcNow,
             ModifiedAt = DateTime.UtcNow
         };
-
         context.BackupJobs.Add(job);
         await context.SaveChangesAsync();
 
-        var syncEngine = new StubSyncEngine(new SyncResult());
-        var service = new JobExecutionService(context, syncEngine);
+        var timestamp = DateTime.UtcNow;
+        var syncEngine = new StubSyncEngine(new SyncResult
+        {
+            FilesScanned = 2,
+            FilesCopied = 1,
+            FilesSkipped = 1,
+            BytesTransferred = 10,
+            OperationLogs =
+            [
+                new SyncOperationLog(
+                    timestamp,
+                    LogLevel.Info,
+                    "Copied file.",
+                    "C:\\Source\\a.txt",
+                    OperationType.Copy),
+                new SyncOperationLog(
+                    timestamp.AddSeconds(1),
+                    LogLevel.Info,
+                    "Skipped excluded file.",
+                    "C:\\Source\\b.tmp",
+                    OperationType.Skip)
+            ]
+        });
 
+        var service = new JobExecutionService(context, syncEngine);
         var execution = await service.ExecuteAsync(job.Id);
 
-        Assert.Equal(JobExecutionStatus.Failed, execution.Status);
-        Assert.Contains(execution.Logs, x => x.Level == LogLevel.Error && x.Message.Contains("configuration is missing"));
+        Assert.Equal(2, execution.Logs.Count);
+        Assert.Contains(execution.Logs, x =>
+            x.Level == LogLevel.Info &&
+            x.OperationType == OperationType.Copy &&
+            x.FilePath == "C:\\Source\\a.txt" &&
+            x.Message == "Copied file.");
+        Assert.Contains(execution.Logs, x =>
+            x.Level == LogLevel.Info &&
+            x.OperationType == OperationType.Skip &&
+            x.FilePath == "C:\\Source\\b.tmp" &&
+            x.Message == "Skipped excluded file.");
     }
 
     [Fact]
@@ -489,6 +609,64 @@ public class JobExecutionServiceTests
         Assert.Contains("Simulated failure", published[1].DetailSummary);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_Loads_ExclusionPatterns_For_SyncEngine()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<ArchiveDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new ArchiveDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var jobId = Guid.NewGuid();
+        var patternId = Guid.NewGuid();
+
+        context.BackupJobs.Add(new BackupJob
+        {
+            Id = jobId,
+            Name = "Pattern Load",
+            SourcePath = "C:\\Source",
+            DestinationPath = "D:\\Destination",
+            Enabled = true,
+            SyncMode = SyncMode.Incremental,
+            ComparisonMethod = ComparisonMethod.Fast,
+            OverwriteBehavior = OverwriteBehavior.AlwaysOverwrite,
+            TriggerType = TriggerType.Manual,
+            CreatedAt = DateTime.UtcNow,
+            ModifiedAt = DateTime.UtcNow
+        });
+
+        context.ExclusionPatterns.Add(new ExclusionPattern
+        {
+            Id = patternId,
+            Name = "Temp",
+            Pattern = "*.tmp",
+            IsGlobal = false,
+            IsSystemSuggestion = false
+        });
+
+        context.BackupJobExclusionPatterns.Add(new BackupJobExclusionPattern
+        {
+            BackupJobId = jobId,
+            ExclusionPatternId = patternId
+        });
+
+        await context.SaveChangesAsync();
+
+        var syncEngine = new CapturingSyncEngine();
+        var service = new JobExecutionService(context, syncEngine);
+
+        await service.ExecuteAsync(jobId);
+
+        Assert.NotNull(syncEngine.LastJob);
+        Assert.Single(syncEngine.LastJob!.BackupJobExclusionPatterns);
+        Assert.Equal("*.tmp", syncEngine.LastJob.BackupJobExclusionPatterns.First().ExclusionPattern?.Pattern);
+    }
+
     private sealed class StubSyncEngine : ISyncEngine
     {
         private readonly SyncResult _result;
@@ -509,6 +687,21 @@ public class JobExecutionServiceTests
         public Task<SyncResult> ExecuteAsync(BackupJob job, CancellationToken cancellationToken = default)
         {
             throw new InvalidOperationException("Simulated failure");
+        }
+    }
+
+    private sealed class CapturingSyncEngine : ISyncEngine
+    {
+        public BackupJob? LastJob { get; private set; }
+
+        public Task<SyncResult> ExecuteAsync(BackupJob job, CancellationToken cancellationToken = default)
+        {
+            LastJob = job;
+            return Task.FromResult(new SyncResult
+            {
+                FilesScanned = 0,
+                FilesSkipped = 0
+            });
         }
     }
 }
@@ -647,237 +840,6 @@ public class JobSchedulerServiceTests
                 It.Is<JobKey>(jobKey => jobKey.Name.Contains(jobId.ToString())),
                 It.IsAny<CancellationToken>()),
             Times.Once);
-    }
-}
-
-public class AzureSqlBackupExecutorTests
-{
-    [Fact]
-    public async Task ExecuteAsync_Uploads_To_All_Destinations_When_All_Succeed()
-    {
-        var exporter = new StubAzureSqlBacpacExporter();
-        var uploaders = new IBackupArtifactUploader[]
-        {
-            new StubBackupArtifactUploader(BackupDestinationType.LocalDevice, shouldFail: false),
-            new StubBackupArtifactUploader(BackupDestinationType.AzureBlobStorage, shouldFail: false)
-        };
-
-        var executor = new AzureSqlBackupExecutor(exporter, uploaders);
-
-        var job = new BackupJob
-        {
-            Id = Guid.NewGuid(),
-            JobType = JobType.AzureSqlDatabaseBackup
-        };
-
-        var azureSqlJob = new AzureSqlBackupJob
-        {
-            JobId = job.Id,
-            DatabaseName = "db",
-            Destinations =
-            {
-                new AzureSqlBackupDestination
-                {
-                    Id = Guid.NewGuid(),
-                    DestinationType = BackupDestinationType.LocalDevice,
-                    Target = "C:\\backups"
-                },
-                new AzureSqlBackupDestination
-                {
-                    Id = Guid.NewGuid(),
-                    DestinationType = BackupDestinationType.AzureBlobStorage,
-                    Target = "archive-container"
-                }
-            }
-        };
-
-        var result = await executor.ExecuteAsync(job, azureSqlJob);
-
-        Assert.Equal(1, result.FilesScanned);
-        Assert.Equal(2, result.FilesCopied);
-        Assert.Equal(0, result.FilesFailed);
-        Assert.Equal(0, result.WarningCount);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_Returns_Warnings_When_One_Destination_Fails()
-    {
-        var exporter = new StubAzureSqlBacpacExporter();
-        var uploaders = new IBackupArtifactUploader[]
-        {
-            new StubBackupArtifactUploader(BackupDestinationType.LocalDevice, shouldFail: false),
-            new StubBackupArtifactUploader(BackupDestinationType.GoogleDrive, shouldFail: true)
-        };
-
-        var executor = new AzureSqlBackupExecutor(exporter, uploaders);
-
-        var job = new BackupJob
-        {
-            Id = Guid.NewGuid(),
-            JobType = JobType.AzureSqlDatabaseBackup
-        };
-
-        var azureSqlJob = new AzureSqlBackupJob
-        {
-            JobId = job.Id,
-            DatabaseName = "db",
-            Destinations =
-            {
-                new AzureSqlBackupDestination
-                {
-                    Id = Guid.NewGuid(),
-                    DestinationType = BackupDestinationType.LocalDevice,
-                    Target = "C:\\backups"
-                },
-                new AzureSqlBackupDestination
-                {
-                    Id = Guid.NewGuid(),
-                    DestinationType = BackupDestinationType.GoogleDrive,
-                    Target = "drive-folder-id"
-                }
-            }
-        };
-
-        var result = await executor.ExecuteAsync(job, azureSqlJob);
-
-        Assert.Equal(1, result.FilesCopied);
-        Assert.Equal(1, result.FilesFailed);
-        Assert.Equal(1, result.WarningCount);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_Throws_When_All_Destinations_Fail()
-    {
-        var exporter = new StubAzureSqlBacpacExporter();
-        var uploaders = new IBackupArtifactUploader[]
-        {
-            new StubBackupArtifactUploader(BackupDestinationType.LocalDevice, shouldFail: true)
-        };
-
-        var executor = new AzureSqlBackupExecutor(exporter, uploaders);
-
-        var job = new BackupJob
-        {
-            Id = Guid.NewGuid(),
-            JobType = JobType.AzureSqlDatabaseBackup
-        };
-
-        var azureSqlJob = new AzureSqlBackupJob
-        {
-            JobId = job.Id,
-            DatabaseName = "db",
-            Destinations =
-            {
-                new AzureSqlBackupDestination
-                {
-                    Id = Guid.NewGuid(),
-                    DestinationType = BackupDestinationType.LocalDevice,
-                    Target = "C:\\backups"
-                }
-            }
-        };
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync(job, azureSqlJob));
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_Uses_WorkflowActions_When_Configured()
-    {
-        var exporter = new StubAzureSqlBacpacExporter();
-        var uploaders = new IBackupArtifactUploader[]
-        {
-            new StubBackupArtifactUploader(BackupDestinationType.LocalDevice, shouldFail: false),
-            new StubBackupArtifactUploader(BackupDestinationType.AzureBlobStorage, shouldFail: false)
-        };
-
-        var executor = new AzureSqlBackupExecutor(exporter, uploaders);
-
-        var job = new BackupJob
-        {
-            Id = Guid.NewGuid(),
-            JobType = JobType.AzureSqlDatabaseBackup
-        };
-
-        var localDestination = new AzureSqlBackupDestination
-        {
-            Id = Guid.NewGuid(),
-            DestinationType = BackupDestinationType.LocalDevice,
-            Target = "C:\\backups"
-        };
-
-        var blobDestination = new AzureSqlBackupDestination
-        {
-            Id = Guid.NewGuid(),
-            DestinationType = BackupDestinationType.AzureBlobStorage,
-            Target = "archive-container"
-        };
-
-        var azureSqlJob = new AzureSqlBackupJob
-        {
-            JobId = job.Id,
-            DatabaseName = "db",
-            Destinations =
-            {
-                localDestination,
-                blobDestination
-            },
-            WorkflowActions =
-            {
-                new AzureSqlBackupWorkflowAction
-                {
-                    Id = Guid.NewGuid(),
-                    StepOrder = 1,
-                    ActionType = AzureSqlWorkflowActionType.AzureSqlExportToDestination,
-                    AzureSqlBackupDestinationId = blobDestination.Id
-                }
-            }
-        };
-
-        var result = await executor.ExecuteAsync(job, azureSqlJob);
-
-        Assert.Equal(1, result.FilesScanned);
-        Assert.Equal(1, result.FilesCopied);
-        Assert.Equal(0, result.FilesFailed);
-    }
-
-    private sealed class StubAzureSqlBacpacExporter : IAzureSqlBacpacExporter
-    {
-        public Task<string> ExportAsync(BackupJob job, AzureSqlBackupJob azureSqlBackupJob, CancellationToken cancellationToken = default)
-        {
-            var artifactDirectory = Path.Combine(Path.GetTempPath(), "ArchiveTests", "AzureSql");
-            Directory.CreateDirectory(artifactDirectory);
-            var artifactPath = Path.Combine(artifactDirectory, $"{Guid.NewGuid():N}.bacpac");
-            File.WriteAllText(artifactPath, "test-artifact");
-            return Task.FromResult(artifactPath);
-        }
-    }
-
-    private sealed class StubBackupArtifactUploader : IBackupArtifactUploader
-    {
-        private readonly bool _shouldFail;
-
-        public StubBackupArtifactUploader(BackupDestinationType destinationType, bool shouldFail)
-        {
-            DestinationType = destinationType;
-            _shouldFail = shouldFail;
-        }
-
-        public BackupDestinationType DestinationType { get; }
-
-        public Task UploadAsync(
-            string artifactPath,
-            BackupJob job,
-            AzureSqlBackupJob azureSqlBackupJob,
-            AzureSqlBackupDestination destination,
-            CancellationToken cancellationToken = default)
-        {
-            if (_shouldFail)
-            {
-                throw new InvalidOperationException("Simulated upload failure");
-            }
-
-            return Task.CompletedTask;
-        }
     }
 }
 
@@ -1223,15 +1185,15 @@ public class CredentialProfileServiceTests
         var service = new CredentialProfileService(context);
 
         var profileId = await service.CreateAsync(
-            CredentialProviderType.AzureSql,
-            "Prod Azure SQL",
-            "Server=tcp:test.database.windows.net;Database=Archive;User ID=test;Password=secret;");
+            CredentialProviderType.AzureBlobStorage,
+            "Blob Account A",
+            "UseDevelopmentStorage=true;");
 
-        var allAzureSqlProfiles = await service.ListAsync(CredentialProviderType.AzureSql);
+        var allProfiles = await service.ListAsync(CredentialProviderType.AzureBlobStorage);
 
-        var profile = Assert.Single(allAzureSqlProfiles);
+        var profile = Assert.Single(allProfiles);
         Assert.Equal(profileId, profile.Id);
-        Assert.Equal("Prod Azure SQL", profile.Name);
+        Assert.Equal("Blob Account A", profile.Name);
     }
 
     [Fact]

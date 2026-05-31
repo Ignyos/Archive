@@ -33,6 +33,7 @@ public partial class MainWindow : Window
     private readonly NotificationRateLimiter _notificationRateLimiter = new();
     private bool _isUpdatingScheduleToggleUi;
     private bool _scheduleEnabled = true;
+    private Guid? _manualRunProgressJobId;
 
     public ObservableCollection<JobListItemViewModel> JobItems { get; } = [];
 
@@ -794,6 +795,15 @@ public partial class MainWindow : Window
 
     private async void OnJobExecutionNotificationPublished(JobExecutionNotificationEvent notificationEvent)
     {
+        await Dispatcher.InvokeAsync(() => HandleManualRunProgressNotification(notificationEvent));
+
+        if (notificationEvent.Kind == JobExecutionNotificationKind.Progress)
+        {
+            return;
+        }
+
+        await Dispatcher.InvokeAsync(RefreshJobList);
+
         try
         {
             using var scope = App.Services.CreateScope();
@@ -839,6 +849,68 @@ public partial class MainWindow : Window
         }
         catch
         {
+        }
+    }
+
+    private void HandleManualRunProgressNotification(JobExecutionNotificationEvent notificationEvent)
+    {
+        if (!notificationEvent.IsManualRun)
+        {
+            return;
+        }
+
+        switch (notificationEvent.Kind)
+        {
+            case JobExecutionNotificationKind.Started:
+                _manualRunProgressJobId = notificationEvent.JobId;
+                ManualRunProgressStatusBarItem.Visibility = Visibility.Visible;
+                ManualRunProgressBar.IsIndeterminate = true;
+                ManualRunProgressBar.Value = 0;
+                ManualRunProgressTextBlock.Text = $"Manual run in progress: {notificationEvent.JobName}";
+                break;
+
+            case JobExecutionNotificationKind.Progress:
+                if (_manualRunProgressJobId != notificationEvent.JobId)
+                {
+                    _manualRunProgressJobId = notificationEvent.JobId;
+                }
+
+                ManualRunProgressStatusBarItem.Visibility = Visibility.Visible;
+
+                var totalBytes = Math.Max(0L, notificationEvent.ProgressTotalBytes ?? 0L);
+                var completedBytes = Math.Max(0L, notificationEvent.ProgressCompletedBytes ?? 0L);
+
+                if (totalBytes <= 0)
+                {
+                    ManualRunProgressBar.IsIndeterminate = true;
+                    ManualRunProgressBar.Value = 0;
+                    ManualRunProgressTextBlock.Text = $"Manual run in progress: {notificationEvent.JobName}";
+                    break;
+                }
+
+                if (completedBytes > totalBytes)
+                {
+                    completedBytes = totalBytes;
+                }
+
+                var percent = (double)completedBytes / totalBytes * 100d;
+                ManualRunProgressBar.IsIndeterminate = false;
+                ManualRunProgressBar.Value = percent;
+                ManualRunProgressTextBlock.Text = $"Manual run: {percent:0}%";
+                break;
+
+            case JobExecutionNotificationKind.Completed:
+            case JobExecutionNotificationKind.Failed:
+                if (_manualRunProgressJobId == notificationEvent.JobId)
+                {
+                    _manualRunProgressJobId = null;
+                    ManualRunProgressBar.IsIndeterminate = false;
+                    ManualRunProgressBar.Value = 0;
+                    ManualRunProgressStatusBarItem.Visibility = Visibility.Collapsed;
+                    ManualRunProgressTextBlock.Text = "Manual run in progress...";
+                }
+
+                break;
         }
     }
 

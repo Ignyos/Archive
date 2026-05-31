@@ -60,18 +60,6 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-
-            <TextBlock VerticalAlignment="Center" Text="Job Type" />
-            <ComboBox Grid.Column="1"
-                      x:Name="JobTypeComboBox"
-                      SelectionChanged="JobTypeComboBox_OnSelectionChanged" />
-        </Grid>
-
-        <Grid Grid.Row="4" Margin="0,12,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="110" />
-                <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
@@ -83,7 +71,7 @@
                     Click="BrowseSourceFolderButton_OnClick" />
         </Grid>
 
-        <Grid Grid.Row="5" Margin="0,12,0,0">
+        <Grid Grid.Row="4" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
@@ -98,7 +86,7 @@
                     Click="BrowseDestinationFolderButton_OnClick" />
         </Grid>
 
-        <Grid Grid.Row="6" Margin="0,12,0,0">
+        <Grid Grid.Row="5" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="110" />
                 <ColumnDefinition Width="*" />
@@ -119,86 +107,22 @@
                           Margin="0,6,0,0"
                           Content="Verify copied files with hash check" />
             </StackPanel>
+        </Grid>
 
-            <StackPanel x:Name="AzureSqlOptionsPanel" Grid.Column="1" Visibility="Collapsed">
-                <TextBlock TextWrapping="Wrap"
-                           Text="DacFx export workflow: Archive uses your Azure SQL source profile to export a BACPAC, then uploads that artifact to the destination below." />
+        <Grid Grid.Row="6" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="110" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-                <TextBlock Margin="0,10,0,0"
-                           FontWeight="SemiBold"
-                           Text="Step 1: Source Profile (Azure SQL)" />
-                <TextBlock Margin="0,2,0,0"
-                           TextWrapping="Wrap"
-                           Text="Select an existing profile or add one. Source profile secret should be a full Azure SQL connection string." />
-                <ComboBox x:Name="SourceCredentialProfileComboBox"
-                          Margin="0,4,0,0"
-                          DisplayMemberPath="Name" />
-
-                <Grid Margin="0,8,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="140" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBox x:Name="NewSourceCredentialNameTextBox"
-                             Margin="0,0,8,0"
-                             ToolTip="New source profile name" />
-                    <PasswordBox x:Name="NewSourceCredentialSecretPasswordBox"
-                                 Grid.Column="1"
-                                 Margin="0,0,8,0"
-                                 ToolTip="Connection string or JSON payload" />
-                    <Button Grid.Column="2"
-                            Width="96"
-                            Content="Add Source"
-                            Click="AddSourceCredentialProfileButton_OnClick" />
-                </Grid>
-
-                <TextBlock Margin="0,12,0,0" Text="Destination Type" />
-                <ComboBox x:Name="AzureDestinationTypeComboBox"
-                          Margin="0,4,0,0"
-                          SelectionChanged="AzureDestinationTypeComboBox_OnSelectionChanged" />
-
-                <TextBlock Margin="0,12,0,0"
-                           FontWeight="SemiBold"
-                           Text="Step 2: Destination Target" />
-                <TextBox x:Name="AzureDestinationTargetTextBox"
-                         Margin="0,4,0,0"
-                         ToolTip="Local folder path, blob container[/prefix], or Google Drive folder id" />
-                <TextBlock x:Name="AzureDestinationTargetHintTextBlock"
-                           Margin="0,2,0,0"
-                           TextWrapping="Wrap"
-                           Text="Enter a target based on destination type." />
-
-                <TextBlock x:Name="DestinationProfileLabelTextBlock"
-                           Margin="0,12,0,0"
-                           Text="Destination Profile" />
-                <ComboBox x:Name="DestinationCredentialProfileComboBox"
-                          Margin="0,4,0,0"
-                          DisplayMemberPath="Name" />
-
-                <Grid x:Name="NewDestinationCredentialGrid" Margin="0,8,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="140" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBox x:Name="NewDestinationCredentialNameTextBox"
-                             Margin="0,0,8,0"
-                             ToolTip="New destination profile name" />
-                    <PasswordBox x:Name="NewDestinationCredentialSecretPasswordBox"
-                                 Grid.Column="1"
-                                 Margin="0,0,8,0"
-                                 ToolTip="Connection string or service account JSON" />
-                    <Button Grid.Column="2"
-                            Width="122"
-                            Content="Add Destination"
-                            Click="AddDestinationCredentialProfileButton_OnClick" />
-                </Grid>
-
-                <TextBlock Margin="0,12,0,0"
-                           TextWrapping="Wrap"
-                           Text="Step 3: Save the job, then run it from the Jobs list using 'Run Now'." />
-            </StackPanel>
+            <TextBlock VerticalAlignment="Top" Margin="0,4,0,0" Text="Ignore Rules" />
+            <TextBox Grid.Column="1"
+                     x:Name="IgnoreRulesTextBox"
+                     Height="86"
+                     AcceptsReturn="True"
+                     VerticalScrollBarVisibility="Auto"
+                     TextWrapping="NoWrap"
+                     ToolTip="One rule per line. Supports *, ?, directory/ and # comments." />
         </Grid>
 
         <Grid Grid.Row="7" Margin="0,12,0,0">

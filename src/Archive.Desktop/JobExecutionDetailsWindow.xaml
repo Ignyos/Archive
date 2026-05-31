@@ -74,17 +74,53 @@
 
                 <Expander x:Name="FailedExpander" Header="Failed" Margin="0,8,0,0" IsExpanded="True">
                     <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Border x:Name="AutoSuggestBorder"
+                                Grid.Row="0"
+                                Margin="8,8,8,0"
+                                Padding="8"
+                                BorderThickness="1"
+                                Visibility="Collapsed">
+                            <DockPanel LastChildFill="True">
+                                <Button x:Name="AutoSuggestAddButton"
+                                        DockPanel.Dock="Right"
+                                        Width="146"
+                                        Margin="12,0,0,0"
+                                        Content="Add Suggested Rule"
+                                        Click="AutoSuggestAddButton_OnClick" />
+                                <TextBlock x:Name="AutoSuggestTextBlock"
+                                           TextWrapping="Wrap"
+                                           VerticalAlignment="Center" />
+                            </DockPanel>
+                        </Border>
+
                         <TextBlock x:Name="NoFailedTextBlock"
+                                   Grid.Row="1"
                                    Margin="8"
                                    Text="No failed operations were recorded for this execution."
                                    TextWrapping="Wrap"
                                    Visibility="Collapsed" />
-                        <DataGrid x:Name="FailedLogsDataGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" MaxHeight="180">
+                        <DataGrid x:Name="FailedLogsDataGrid" Grid.Row="2" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" MaxHeight="180">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="Time" Binding="{Binding TimestampLocal}" Width="140" />
                                 <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="90" />
                                 <DataGridTextColumn Header="File" Binding="{Binding FilePath}" Width="280" />
                                 <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*" />
+                                <DataGridTemplateColumn Header="Action" Width="124">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Content="Suggest Ignore"
+                                                    Margin="4,0,0,0"
+                                                    Padding="8,2"
+                                                    Click="SuggestIgnoreButton_OnClick" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                             </DataGrid.Columns>
                         </DataGrid>
                     </Grid>

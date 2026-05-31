@@ -53,6 +53,4 @@ public sealed class BackupJob
     public ICollection<JobExecution> Executions { get; set; } = new List<JobExecution>();
 
     public ICollection<BackupJobExclusionPattern> BackupJobExclusionPatterns { get; set; } = new List<BackupJobExclusionPattern>();
-
-    public AzureSqlBackupJob? AzureSqlBackupJob { get; set; }
 }

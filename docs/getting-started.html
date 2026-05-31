@@ -82,47 +82,10 @@
       </section>
 
       <section class="panel">
-        <h2>2b) Create an Azure SQL database backup job</h2>
-        <ol>
-          <li>Select <strong>File → New Job</strong>.</li>
-          <li>Set <strong>Job Type</strong> to <strong>AzureSqlDatabaseBackup</strong>.</li>
-          <li>Enter job <strong>Name</strong> and optional <strong>Description</strong>.</li>
-          <li>Configure source fields:
-            <ul>
-              <li><strong>Azure SQL Server</strong> = your server host name (for example <code>myserver.database.windows.net</code>).</li>
-              <li><strong>Database</strong> = exact database name to back up.</li>
-              <li><strong>Source Profile (Azure SQL)</strong> = choose an existing profile or create a new one with a valid Azure SQL connection string.</li>
-            </ul>
-          </li>
-          <li>Configure destination fields:
-            <ul>
-              <li><strong>Destination Type</strong> = <code>LocalDevice</code>, <code>AzureBlobStorage</code>, or <code>GoogleDrive</code>.</li>
-              <li><strong>Destination Target</strong>:
-                <ul>
-                  <li><strong>LocalDevice</strong>: local folder path (example <code>D:\ArchiveBackups</code>).</li>
-                  <li><strong>AzureBlobStorage</strong>: <code>container</code> or <code>container/prefix</code> (example <code>archive-backups/sql</code>).</li>
-                  <li><strong>GoogleDrive</strong>: target Drive folder id.</li>
-                </ul>
-              </li>
-              <li><strong>Destination Profile</strong> (required for Azure Blob and Google Drive) = select existing credentials profile or create a new one.
-                <ul>
-                  <li>Azure Blob profile secret = storage connection string.</li>
-                  <li>Google Drive profile secret = service account JSON payload.</li>
-                </ul>
-              </li>
-            </ul>
-          </li>
-          <li>Choose trigger type (Manual, One-Time, Recurring) and save.</li>
-        </ol>
-      </section>
-
-      <section class="panel">
-        <h2>2c) Job type quick reference (v1.1.0)</h2>
+        <h2>2b) Job type quick reference (v1.1.0)</h2>
         <ul>
           <li><strong>DirectorySync</strong>: Source = file/folder path, Destination = existing local folder path.</li>
-          <li><strong>AzureSqlDatabaseBackup</strong>: Source = Azure SQL server + database + source credential profile, Destination = selected destination type + target + optional destination credential profile.</li>
         </ul>
-        <p class="notice"><strong>Current scope:</strong> v1.1.0 UI configures one destination per Azure SQL backup job.</p>
       </section>
 
       <section class="panel">

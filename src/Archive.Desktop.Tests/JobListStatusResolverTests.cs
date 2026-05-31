@@ -50,18 +50,40 @@ public class JobListStatusResolverTests
     }
 
     [Fact]
-    public void Resolve_ReturnsScheduled_WhenEnabledAndScheduledAndNoFailureState()
+    public void Resolve_ReturnsCompleted_WhenLatestExecutionCompleted()
     {
         var status = JobListStatusResolver.Resolve(
             enabled: true,
             triggerType: TriggerType.Recurring,
             latestExecutionStatus: JobExecutionStatus.Completed);
 
+        Assert.Equal("Completed", status);
+    }
+
+    [Fact]
+    public void Resolve_ReturnsCancelled_WhenLatestExecutionCancelled()
+    {
+        var status = JobListStatusResolver.Resolve(
+            enabled: true,
+            triggerType: TriggerType.Recurring,
+            latestExecutionStatus: JobExecutionStatus.Cancelled);
+
+        Assert.Equal("Cancelled", status);
+    }
+
+    [Fact]
+    public void Resolve_ReturnsScheduled_WhenEnabledAndScheduledAndNoExecution()
+    {
+        var status = JobListStatusResolver.Resolve(
+            enabled: true,
+            triggerType: TriggerType.Recurring,
+            latestExecutionStatus: null);
+
         Assert.Equal("Scheduled", status);
     }
 
     [Fact]
-    public void Resolve_ReturnsIdle_WhenManualOrDisabled()
+    public void Resolve_ReturnsIdle_WhenManualOrDisabledAndNoExecution()
     {
         var manualStatus = JobListStatusResolver.Resolve(
             enabled: true,

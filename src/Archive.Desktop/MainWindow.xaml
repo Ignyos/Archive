@@ -32,6 +32,22 @@
                           Checked="ScheduleEnabledCheckBox_OnChecked"
                           Unchecked="ScheduleEnabledCheckBox_OnUnchecked" />
             </StatusBarItem>
+            <StatusBarItem x:Name="ManualRunProgressStatusBarItem" Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="ManualRunProgressTextBlock"
+                               Margin="0,0,8,0"
+                               VerticalAlignment="Center"
+                               Text="Manual run in progress..." />
+                    <ProgressBar x:Name="ManualRunProgressBar"
+                                 Width="180"
+                                 Height="14"
+                                 Minimum="0"
+                                 Maximum="100"
+                                 IsIndeterminate="True"
+                                 Value="0"
+                                 VerticalAlignment="Center" />
+                </StackPanel>
+            </StatusBarItem>
             <StatusBarItem>
                 <TextBlock x:Name="VersionStatusTextBlock"
                            Text="You're on the most recent version: v0.1.0" />

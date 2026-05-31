@@ -9,8 +9,10 @@ public static class JobPreviewService
 {
     public static JobPreviewResult BuildPreview(BackupJob job)
     {
+        var ignoreRules = IgnoreRuleMatcher.NormalizeRules((job.BackupJobExclusionPatterns ?? Array.Empty<BackupJobExclusionPattern>())
+            .Select(x => x.ExclusionPattern?.Pattern));
         var sourceFiles = EnumerateSourceFiles(job).ToList();
-        var destinationLookup = BuildDestinationLookup(job);
+        var destinationLookup = BuildDestinationLookup(job, ignoreRules);
         var decisionService = new SyncDecisionService();
 
         var filesToAdd = 0;
@@ -24,6 +26,12 @@ public static class JobPreviewService
         foreach (var sourceFile in sourceFiles)
         {
             sourceKeys.Add(sourceFile.Key);
+
+            if (IgnoreRuleMatcher.IsIgnored(sourceFile.Key, ignoreRules))
+            {
+                filesSkipped++;
+                continue;
+            }
 
             if (job.SyncOptions?.SkipHiddenAndSystem == true && IsHiddenOrSystem(sourceFile.Path))
             {
@@ -118,7 +126,7 @@ public static class JobPreviewService
         }
     }
 
-    private static Dictionary<string, string> BuildDestinationLookup(BackupJob job)
+    private static Dictionary<string, string> BuildDestinationLookup(BackupJob job, IReadOnlyList<string> ignoreRules)
     {
         if (!Directory.Exists(job.DestinationPath))
         {
@@ -144,6 +152,11 @@ public static class JobPreviewService
         foreach (var file in EnumerateFilesSafe(job.DestinationPath, recursive))
         {
             var relativePath = Path.GetRelativePath(job.DestinationPath, file);
+            if (IgnoreRuleMatcher.IsIgnored(relativePath, ignoreRules))
+            {
+                continue;
+            }
+
             lookup[relativePath] = file;
         }
 

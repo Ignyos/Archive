@@ -24,12 +24,6 @@ public sealed class ArchiveDbContext : DbContext
 
     public DbSet<CredentialProfile> CredentialProfiles => Set<CredentialProfile>();
 
-    public DbSet<AzureSqlBackupJob> AzureSqlBackupJobs => Set<AzureSqlBackupJob>();
-
-    public DbSet<AzureSqlBackupDestination> AzureSqlBackupDestinations => Set<AzureSqlBackupDestination>();
-
-    public DbSet<AzureSqlBackupWorkflowAction> AzureSqlBackupWorkflowActions => Set<AzureSqlBackupWorkflowAction>();
-
     public DbSet<ApplicationLog> ApplicationLogs => Set<ApplicationLog>();
 
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
@@ -55,37 +49,6 @@ public sealed class ArchiveDbContext : DbContext
         modelBuilder.Entity<BackupJob>()
             .Property(x => x.JobType)
             .HasDefaultValue(JobType.DirectorySync);
-
-        modelBuilder.Entity<AzureSqlBackupJob>()
-            .HasKey(x => x.JobId);
-
-        modelBuilder.Entity<BackupJob>()
-            .HasOne(x => x.AzureSqlBackupJob)
-            .WithOne(x => x.Job)
-            .HasForeignKey<AzureSqlBackupJob>(x => x.JobId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<AzureSqlBackupDestination>()
-            .HasOne(x => x.AzureSqlBackupJob)
-            .WithMany(x => x.Destinations)
-            .HasForeignKey(x => x.AzureSqlBackupJobId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<AzureSqlBackupWorkflowAction>()
-            .HasOne(x => x.AzureSqlBackupJob)
-            .WithMany(x => x.WorkflowActions)
-            .HasForeignKey(x => x.AzureSqlBackupJobId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<AzureSqlBackupWorkflowAction>()
-            .HasOne(x => x.AzureSqlBackupDestination)
-            .WithMany()
-            .HasForeignKey(x => x.AzureSqlBackupDestinationId)
-            .OnDelete(DeleteBehavior.SetNull);
-
-        modelBuilder.Entity<AzureSqlBackupWorkflowAction>()
-            .HasIndex(x => new { x.AzureSqlBackupJobId, x.StepOrder })
-            .IsUnique();
 
         modelBuilder.Entity<JobExecution>()
             .HasMany(x => x.Logs)

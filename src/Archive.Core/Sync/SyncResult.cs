@@ -1,4 +1,14 @@
+using Archive.Core.Domain.Enums;
+
 namespace Archive.Core.Sync;
+
+public sealed record SyncOperationLog(
+    DateTime Timestamp,
+    LogLevel Level,
+    string Message,
+    string? FilePath,
+    OperationType? OperationType,
+    string? ExceptionDetails = null);
 
 public sealed class SyncResult
 {
@@ -19,4 +29,6 @@ public sealed class SyncResult
     public int ErrorCount { get; init; }
 
     public int WarningCount { get; init; }
+
+    public IReadOnlyList<SyncOperationLog> OperationLogs { get; init; } = Array.Empty<SyncOperationLog>();
 }

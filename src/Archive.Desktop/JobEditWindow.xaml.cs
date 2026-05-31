@@ -3,6 +3,7 @@ using System.IO;
 using Archive.Core.Domain.Enums;
 using Archive.Core.Domain.Entities;
 using Archive.Core.Jobs;
+using Archive.Core.Sync;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Forms = System.Windows.Forms;
@@ -18,14 +19,6 @@ public partial class JobEditWindow : Window
     private readonly OverwriteBehavior _overwriteBehavior;
     private bool _suppressDeleteOrphanedPrompt;
     private bool _suppressRecurringSync;
-    private bool _isLoadingProfiles;
-
-    private sealed class CredentialProfileOption
-    {
-        public Guid Id { get; init; }
-
-        public string Name { get; init; } = string.Empty;
-    }
 
     public JobEditWindow()
     {
@@ -38,20 +31,15 @@ public partial class JobEditWindow : Window
         _overwriteBehavior = OverwriteBehavior.AlwaysOverwrite;
 
         TriggerTypeComboBox.ItemsSource = Enum.GetValues<TriggerType>();
-        JobTypeComboBox.ItemsSource = Enum.GetValues<JobType>();
         SimpleFrequencyComboBox.ItemsSource = Enum.GetValues<SimpleRecurringFrequency>();
         SimpleDayOfWeekComboBox.ItemsSource = Enum.GetValues<DayOfWeek>();
-        AzureDestinationTypeComboBox.ItemsSource = Enum.GetValues<BackupDestinationType>();
         InitializeTimePickers();
 
         NameTextBox.Text = string.Empty;
         DescriptionTextBox.Text = string.Empty;
-        JobTypeComboBox.SelectedItem = JobType.DirectorySync;
         SourcePathTextBox.Text = string.Empty;
         DestinationPathTextBox.Text = string.Empty;
-        AzureSqlOptionsPanel.Visibility = Visibility.Collapsed;
-        AzureDestinationTypeComboBox.SelectedItem = BackupDestinationType.LocalDevice;
-        AzureDestinationTargetTextBox.Text = string.Empty;
+        IgnoreRulesTextBox.Text = string.Empty;
         TriggerTypeComboBox.SelectedItem = TriggerType.Manual;
         InitializeRecurringControls(null);
         OneTimeDatePicker.SelectedDate = DateTime.Now.AddDays(1).Date;
@@ -67,8 +55,7 @@ public partial class JobEditWindow : Window
         EnabledCheckBox.IsChecked = true;
         Title = "New Job";
         HeaderTextBlock.Text = "New Job";
-        LoadCredentialProfiles();
-        RefreshJobTypeUi();
+        ConfigureDirectorySyncUi();
         RefreshSchedulingUi();
     }
 
@@ -85,10 +72,8 @@ public partial class JobEditWindow : Window
         DescriptionTextBox.Text = selectedJob.Description ?? string.Empty;
         SourcePathTextBox.Text = selectedJob.SourcePath;
         DestinationPathTextBox.Text = selectedJob.DestinationPath;
+        IgnoreRulesTextBox.Text = LoadIgnoreRulesText(selectedJob.Id);
         TriggerTypeComboBox.ItemsSource = Enum.GetValues<TriggerType>();
-        JobTypeComboBox.ItemsSource = Enum.GetValues<JobType>();
-        AzureDestinationTypeComboBox.ItemsSource = Enum.GetValues<BackupDestinationType>();
-        JobTypeComboBox.SelectedItem = selectedJob.JobType;
         TriggerTypeComboBox.SelectedItem = selectedJob.TriggerType;
 
         SimpleFrequencyComboBox.ItemsSource = Enum.GetValues<SimpleRecurringFrequency>();
@@ -112,147 +97,8 @@ public partial class JobEditWindow : Window
         EnabledCheckBox.IsChecked = selectedJob.Enabled;
         Title = $"Edit Job - {selectedJob.Name}";
         HeaderTextBlock.Text = "Edit Job";
-        LoadCredentialProfiles();
-        LoadAzureJobConfigurationIfNeeded();
-        RefreshJobTypeUi();
+        ConfigureDirectorySyncUi();
         RefreshSchedulingUi();
-    }
-
-    private void LoadAzureJobConfigurationIfNeeded()
-    {
-        if (JobTypeComboBox.SelectedItem is not JobType.AzureSqlDatabaseBackup)
-        {
-            return;
-        }
-
-        using var scope = App.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<Archive.Infrastructure.Persistence.ArchiveDbContext>();
-
-        var job = dbContext.BackupJobs
-            .AsNoTracking()
-            .Include(x => x.AzureSqlBackupJob)
-                .ThenInclude(x => x!.Destinations)
-            .FirstOrDefault(x => x.Id == _jobId);
-
-        var azureConfig = job?.AzureSqlBackupJob;
-        if (azureConfig is null)
-        {
-            return;
-        }
-
-        SourcePathTextBox.Text = azureConfig.ServerName;
-        DestinationPathTextBox.Text = azureConfig.DatabaseName;
-
-        var sourceProfileId = TryParseGuid(azureConfig.CredentialsSecretReference);
-        if (sourceProfileId.HasValue)
-        {
-            SelectCredentialProfile(SourceCredentialProfileComboBox, sourceProfileId.Value);
-        }
-
-        var destination = azureConfig.Destinations.FirstOrDefault();
-        if (destination is null)
-        {
-            return;
-        }
-
-        AzureDestinationTypeComboBox.SelectedItem = destination.DestinationType;
-        AzureDestinationTargetTextBox.Text = destination.Target;
-
-        var destinationProfileId = TryParseGuid(destination.CredentialsSecretReference);
-        if (destinationProfileId.HasValue)
-        {
-            LoadDestinationCredentialProfiles();
-            SelectCredentialProfile(DestinationCredentialProfileComboBox, destinationProfileId.Value);
-        }
-    }
-
-    private void SelectCredentialProfile(System.Windows.Controls.ComboBox comboBox, Guid profileId)
-    {
-        var match = comboBox.Items
-            .OfType<CredentialProfileOption>()
-            .FirstOrDefault(x => x.Id == profileId);
-
-        if (match is not null)
-        {
-            comboBox.SelectedItem = match;
-        }
-    }
-
-    private void LoadCredentialProfiles()
-    {
-        _isLoadingProfiles = true;
-
-        try
-        {
-            using var scope = App.Services.CreateScope();
-            var profileService = scope.ServiceProvider.GetRequiredService<ICredentialProfileService>();
-
-            var sourceProfiles = profileService
-                .ListAsync(CredentialProviderType.AzureSql)
-                .GetAwaiter()
-                .GetResult()
-                .Select(x => new CredentialProfileOption
-                {
-                    Id = x.Id,
-                    Name = x.Name
-                })
-                .ToList();
-
-            SourceCredentialProfileComboBox.ItemsSource = sourceProfiles;
-            if (SourceCredentialProfileComboBox.SelectedItem is null && sourceProfiles.Count > 0)
-            {
-                SourceCredentialProfileComboBox.SelectedIndex = 0;
-            }
-
-            LoadDestinationCredentialProfiles();
-        }
-        finally
-        {
-            _isLoadingProfiles = false;
-        }
-    }
-
-    private void LoadDestinationCredentialProfiles()
-    {
-        if (AzureDestinationTypeComboBox.SelectedItem is not BackupDestinationType destinationType)
-        {
-            DestinationCredentialProfileComboBox.ItemsSource = Array.Empty<CredentialProfileOption>();
-            return;
-        }
-
-        var providerType = ToCredentialProviderType(destinationType);
-        if (providerType is null)
-        {
-            DestinationCredentialProfileComboBox.ItemsSource = Array.Empty<CredentialProfileOption>();
-            DestinationCredentialProfileComboBox.SelectedItem = null;
-            return;
-        }
-
-        using var scope = App.Services.CreateScope();
-        var profileService = scope.ServiceProvider.GetRequiredService<ICredentialProfileService>();
-        var destinationProfiles = profileService
-            .ListAsync(providerType.Value)
-            .GetAwaiter()
-            .GetResult()
-            .Select(x => new CredentialProfileOption
-            {
-                Id = x.Id,
-                Name = x.Name
-            })
-            .ToList();
-
-        DestinationCredentialProfileComboBox.ItemsSource = destinationProfiles;
-        if (DestinationCredentialProfileComboBox.SelectedItem is null && destinationProfiles.Count > 0)
-        {
-            DestinationCredentialProfileComboBox.SelectedIndex = 0;
-        }
-    }
-
-    private static Guid? TryParseGuid(string? value)
-    {
-        return Guid.TryParse(value, out var parsed)
-            ? parsed
-            : null;
     }
 
     private void ScheduleInput_OnChanged(object sender, RoutedEventArgs e)
@@ -276,95 +122,47 @@ public partial class JobEditWindow : Window
             return;
         }
 
-        if (JobTypeComboBox.SelectedItem is not JobType jobType)
+        var sourcePath = SourcePathTextBox.Text.Trim();
+        var destinationPath = DestinationPathTextBox.Text.Trim();
+        var ignoreRules = ParseIgnoreRulesFromEditor();
+
+        if (string.IsNullOrWhiteSpace(sourcePath))
         {
-            ValidationTextBlock.Text = "Job type is required.";
+            ValidationTextBlock.Text = "Source path is required.";
             return;
         }
 
-        var sourcePath = SourcePathTextBox.Text.Trim();
-        var destinationPath = DestinationPathTextBox.Text.Trim();
-
-        if (jobType == JobType.DirectorySync)
+        if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath))
         {
-            if (string.IsNullOrWhiteSpace(sourcePath))
-            {
-                ValidationTextBlock.Text = "Source path is required.";
-                return;
-            }
-
-            if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath))
-            {
-                ValidationTextBlock.Text = "Source path must exist and be accessible.";
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(destinationPath))
-            {
-                ValidationTextBlock.Text = "Destination path is required.";
-                return;
-            }
-
-            if (!Directory.Exists(destinationPath))
-            {
-                ValidationTextBlock.Text = "Destination path must be an existing accessible directory.";
-                return;
-            }
-
-            if (string.Equals(
-                    sourcePath.TrimEnd('\\', '/'),
-                    destinationPath.TrimEnd('\\', '/'),
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                ValidationTextBlock.Text = "Source and destination cannot be the same path.";
-                return;
-            }
-
-            if (IsDestinationNestedWithinSource(sourcePath, destinationPath))
-            {
-                ValidationTextBlock.Text = "Destination cannot be inside the source path.";
-                return;
-            }
+            ValidationTextBlock.Text = "Source path must exist and be accessible.";
+            return;
         }
-        else
+
+        if (string.IsNullOrWhiteSpace(destinationPath))
         {
-            if (string.IsNullOrWhiteSpace(sourcePath))
-            {
-                ValidationTextBlock.Text = "Azure SQL server is required.";
-                return;
-            }
+            ValidationTextBlock.Text = "Destination path is required.";
+            return;
+        }
 
-            if (string.IsNullOrWhiteSpace(destinationPath))
-            {
-                ValidationTextBlock.Text = "Azure SQL database name is required.";
-                return;
-            }
+        if (!Directory.Exists(destinationPath))
+        {
+            ValidationTextBlock.Text = "Destination path must be an existing accessible directory.";
+            return;
+        }
 
-            if (AzureDestinationTypeComboBox.SelectedItem is not BackupDestinationType)
-            {
-                ValidationTextBlock.Text = "Destination type is required.";
-                return;
-            }
+        if (string.Equals(
+                sourcePath.TrimEnd('\\', '/'),
+                destinationPath.TrimEnd('\\', '/'),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            ValidationTextBlock.Text = "Source and destination cannot be the same path.";
+            return;
+        }
 
-            if (string.IsNullOrWhiteSpace(AzureDestinationTargetTextBox.Text))
-            {
-                ValidationTextBlock.Text = "Destination target is required. Use the format shown below the field.";
-                return;
-            }
-
-            if (SourceCredentialProfileComboBox.SelectedItem is not CredentialProfileOption)
-            {
-                ValidationTextBlock.Text = "Select an Azure SQL source profile, or add one before saving.";
-                return;
-            }
-
-            if (AzureDestinationTypeComboBox.SelectedItem is BackupDestinationType destinationType
-                && RequiresDestinationCredentials(destinationType)
-                && DestinationCredentialProfileComboBox.SelectedItem is not CredentialProfileOption)
-            {
-                ValidationTextBlock.Text = "Select a destination credential profile, or add one before saving.";
-                return;
-            }
+        if (IsDestinationNestedWithinSource(sourcePath, destinationPath))
+        {
+            ValidationTextBlock.Text = "Destination cannot be inside the source path.";
+            return;
         }
 
         if (TriggerTypeComboBox.SelectedItem is not TriggerType triggerType)
@@ -431,18 +229,9 @@ public partial class JobEditWindow : Window
                 return;
             }
 
-            var saved = jobType == JobType.DirectorySync
-                ? (_isCreateMode
-                    ? await CreateJobAsync(dbContext, name, sourcePath, destinationPath, triggerType, cronExpression, simpleTriggerTime)
-                    : await UpdateJobAsync(scope.ServiceProvider, name, sourcePath, destinationPath, triggerType, cronExpression, simpleTriggerTime))
-                : await CreateOrUpdateAzureSqlJobAsync(
-                    dbContext,
-                    name,
-                    sourcePath,
-                    destinationPath,
-                    triggerType,
-                    cronExpression,
-                    simpleTriggerTime);
+            var saved = _isCreateMode
+                ? await CreateJobAsync(dbContext, name, sourcePath, destinationPath, triggerType, cronExpression, simpleTriggerTime, ignoreRules)
+                : await UpdateJobAsync(scope.ServiceProvider, dbContext, name, sourcePath, destinationPath, triggerType, cronExpression, simpleTriggerTime, ignoreRules);
 
             if (!saved)
             {
@@ -461,160 +250,19 @@ public partial class JobEditWindow : Window
         }
     }
 
-    private async Task<bool> CreateOrUpdateAzureSqlJobAsync(
-        Archive.Infrastructure.Persistence.ArchiveDbContext dbContext,
-        string name,
-        string serverName,
-        string databaseName,
-        TriggerType triggerType,
-        string? cronExpression,
-        DateTime? simpleTriggerTime)
-    {
-        if (AzureDestinationTypeComboBox.SelectedItem is not BackupDestinationType destinationType)
-        {
-            return false;
-        }
-
-        var destinationTarget = AzureDestinationTargetTextBox.Text.Trim();
-        if (string.IsNullOrWhiteSpace(destinationTarget))
-        {
-            return false;
-        }
-
-        var sourceProfileId = (SourceCredentialProfileComboBox.SelectedItem as CredentialProfileOption)?.Id;
-        if (!sourceProfileId.HasValue)
-        {
-            return false;
-        }
-
-        Guid? destinationProfileId = null;
-        if (destinationType is BackupDestinationType.AzureBlobStorage or BackupDestinationType.GoogleDrive)
-        {
-            destinationProfileId = (DestinationCredentialProfileComboBox.SelectedItem as CredentialProfileOption)?.Id;
-            if (!destinationProfileId.HasValue)
-            {
-                return false;
-            }
-        }
-
-        var normalizedOneTimeUtc = simpleTriggerTime.HasValue
-            ? (simpleTriggerTime.Value.Kind == DateTimeKind.Utc
-                ? simpleTriggerTime.Value
-                : simpleTriggerTime.Value.ToUniversalTime())
-            : (DateTime?)null;
-
-        var existing = await dbContext.BackupJobs
-            .Include(x => x.AzureSqlBackupJob)
-                .ThenInclude(x => x!.Destinations)
-            .Include(x => x.SyncOptions)
-            .FirstOrDefaultAsync(x => x.Id == _jobId);
-
-        var now = DateTime.UtcNow;
-
-        if (existing is null)
-        {
-            var azureConfig = new AzureSqlBackupJob
-            {
-                JobId = _jobId,
-                ServerName = serverName,
-                DatabaseName = databaseName,
-                CredentialsSecretReference = sourceProfileId.Value.ToString()
-            };
-
-            azureConfig.Destinations.Add(new AzureSqlBackupDestination
-            {
-                Id = Guid.NewGuid(),
-                DestinationType = destinationType,
-                Target = destinationTarget,
-                CredentialsSecretReference = destinationProfileId?.ToString()
-            });
-
-            dbContext.BackupJobs.Add(new BackupJob
-            {
-                Id = _jobId,
-                JobType = JobType.AzureSqlDatabaseBackup,
-                Name = name,
-                Description = DescriptionTextBox.Text,
-                SourcePath = serverName,
-                DestinationPath = databaseName,
-                Enabled = EnabledCheckBox.IsChecked ?? false,
-                TriggerType = triggerType,
-                CronExpression = triggerType == TriggerType.Recurring ? cronExpression : null,
-                SimpleTriggerTime = triggerType == TriggerType.OneTime ? normalizedOneTimeUtc : null,
-                SyncMode = _syncMode,
-                ComparisonMethod = _comparisonMethod,
-                OverwriteBehavior = _overwriteBehavior,
-                CreatedAt = now,
-                ModifiedAt = now,
-                AzureSqlBackupJob = azureConfig
-            });
-
-            await dbContext.SaveChangesAsync();
-            return true;
-        }
-
-        existing.JobType = JobType.AzureSqlDatabaseBackup;
-        existing.Name = name;
-        existing.Description = DescriptionTextBox.Text;
-        existing.SourcePath = serverName;
-        existing.DestinationPath = databaseName;
-        existing.Enabled = EnabledCheckBox.IsChecked ?? false;
-        existing.TriggerType = triggerType;
-        existing.CronExpression = triggerType == TriggerType.Recurring ? cronExpression : null;
-        existing.SimpleTriggerTime = triggerType == TriggerType.OneTime ? normalizedOneTimeUtc : null;
-        existing.ModifiedAt = now;
-
-        if (existing.SyncOptions is not null)
-        {
-            existing.SyncOptions.Recursive = true;
-            existing.SyncOptions.DeleteOrphaned = false;
-            existing.SyncOptions.SkipHiddenAndSystem = true;
-            existing.SyncOptions.VerifyAfterCopy = false;
-        }
-
-        if (existing.AzureSqlBackupJob is null)
-        {
-            existing.AzureSqlBackupJob = new AzureSqlBackupJob
-            {
-                JobId = _jobId
-            };
-        }
-
-        existing.AzureSqlBackupJob.ServerName = serverName;
-        existing.AzureSqlBackupJob.DatabaseName = databaseName;
-        existing.AzureSqlBackupJob.CredentialsSecretReference = sourceProfileId.Value.ToString();
-
-        var destination = existing.AzureSqlBackupJob.Destinations.FirstOrDefault();
-        if (destination is null)
-        {
-            destination = new AzureSqlBackupDestination
-            {
-                Id = Guid.NewGuid(),
-                AzureSqlBackupJobId = existing.AzureSqlBackupJob.JobId
-            };
-
-            existing.AzureSqlBackupJob.Destinations.Add(destination);
-        }
-
-        destination.DestinationType = destinationType;
-        destination.Target = destinationTarget;
-        destination.CredentialsSecretReference = destinationProfileId?.ToString();
-
-        await dbContext.SaveChangesAsync();
-        return true;
-    }
-
     private async Task<bool> UpdateJobAsync(
         IServiceProvider serviceProvider,
+        Archive.Infrastructure.Persistence.ArchiveDbContext dbContext,
         string name,
         string sourcePath,
         string destinationPath,
         TriggerType triggerType,
         string? cronExpression,
-        DateTime? simpleTriggerTime)
+        DateTime? simpleTriggerTime,
+        IReadOnlyList<string> ignoreRules)
     {
         var backupJobStateService = serviceProvider.GetRequiredService<IBackupJobStateService>();
-        return await backupJobStateService.UpdateBasicFieldsAsync(
+        var updated = await backupJobStateService.UpdateBasicFieldsAsync(
             _jobId,
             name,
             DescriptionTextBox.Text,
@@ -628,6 +276,14 @@ public partial class JobEditWindow : Window
             deleteOrphaned: DeleteOrphanedCheckBox.IsChecked ?? false,
             skipHiddenAndSystem: SkipHiddenAndSystemCheckBox.IsChecked ?? true,
             verifyAfterCopy: VerifyAfterCopyCheckBox.IsChecked ?? false);
+
+        if (!updated)
+        {
+            return false;
+        }
+
+        await SaveIgnoreRulesAsync(dbContext, _jobId, ignoreRules);
+        return true;
     }
 
     private async Task<bool> CreateJobAsync(
@@ -637,7 +293,8 @@ public partial class JobEditWindow : Window
         string destinationPath,
         TriggerType triggerType,
         string? cronExpression,
-        DateTime? simpleTriggerTime)
+        DateTime? simpleTriggerTime,
+        IReadOnlyList<string> ignoreRules)
     {
         var now = DateTime.UtcNow;
 
@@ -659,6 +316,7 @@ public partial class JobEditWindow : Window
         var job = new BackupJob
         {
             Id = _jobId,
+            JobType = JobType.DirectorySync,
             Name = name,
             Description = DescriptionTextBox.Text,
             SourcePath = sourcePath,
@@ -676,6 +334,8 @@ public partial class JobEditWindow : Window
             ModifiedAt = now
         };
 
+        ApplyIgnoreRules(job, ignoreRules);
+
         dbContext.SyncOptions.Add(syncOptions);
         dbContext.BackupJobs.Add(job);
         await dbContext.SaveChangesAsync();
@@ -684,12 +344,6 @@ public partial class JobEditWindow : Window
 
     private void PreviewOperationsButton_OnClick(object sender, RoutedEventArgs e)
     {
-        if (JobTypeComboBox.SelectedItem is JobType.AzureSqlDatabaseBackup)
-        {
-            ValidationTextBlock.Text = "Preview is available for directory sync jobs only.";
-            return;
-        }
-
         if (!TryBuildTransientJobFromForm(out var transientJob, out var validationError) || transientJob is null)
         {
             ValidationTextBlock.Text = validationError;
@@ -1086,12 +740,6 @@ public partial class JobEditWindow : Window
         job = null;
         validationError = string.Empty;
 
-        if (JobTypeComboBox.SelectedItem is JobType.AzureSqlDatabaseBackup)
-        {
-            validationError = "Preview is available for directory sync jobs only.";
-            return false;
-        }
-
         var name = NameTextBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -1201,171 +849,134 @@ public partial class JobEditWindow : Window
                 DeleteOrphaned = DeleteOrphanedCheckBox.IsChecked ?? false,
                 SkipHiddenAndSystem = SkipHiddenAndSystemCheckBox.IsChecked ?? true,
                 VerifyAfterCopy = VerifyAfterCopyCheckBox.IsChecked ?? false
-            }
+            },
+            BackupJobExclusionPatterns = ParseIgnoreRulesFromEditor()
+                .Select((pattern, index) => new BackupJobExclusionPattern
+                {
+                    ExclusionPattern = new ExclusionPattern
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = $"Rule {index + 1}",
+                        Pattern = pattern,
+                        IsGlobal = false,
+                        IsSystemSuggestion = false
+                    }
+                })
+                .ToList()
         };
 
         return true;
     }
 
-    private async void AddSourceCredentialProfileButton_OnClick(object sender, RoutedEventArgs e)
+    private void ConfigureDirectorySyncUi()
     {
-        var name = NewSourceCredentialNameTextBox.Text.Trim();
-        var secret = NewSourceCredentialSecretPasswordBox.Password.Trim();
+        OptionsLabelTextBlock.Text = "Sync Options";
+        SyncOptionsPanel.Visibility = Visibility.Visible;
 
-        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(secret))
-        {
-            ValidationTextBlock.Text = "Provide source profile name and secret to add a new source profile.";
-            return;
-        }
+        SourceLabelTextBlock.Text = "Source";
+        DestinationLabelTextBlock.Text = "Destination";
 
+        BrowseSourceFolderButton.Visibility = Visibility.Visible;
+        BrowseDestinationFolderButton.Visibility = Visibility.Visible;
+
+        SourcePathTextBox.ToolTip = null;
+        DestinationPathTextBox.ToolTip = null;
+
+        PreviewOperationsButton.IsEnabled = true;
+        PreviewOperationsButton.ToolTip = null;
+    }
+
+    private IReadOnlyList<string> ParseIgnoreRulesFromEditor()
+    {
+        return ParseIgnoreRules(IgnoreRulesTextBox.Text);
+    }
+
+    private static IReadOnlyList<string> ParseIgnoreRules(string? text)
+    {
+        return IgnoreRuleMatcher.NormalizeRules((text ?? string.Empty)
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim()))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private string LoadIgnoreRulesText(Guid jobId)
+    {
         try
         {
             using var scope = App.Services.CreateScope();
-            var profileService = scope.ServiceProvider.GetRequiredService<ICredentialProfileService>();
-            var createdId = await profileService.CreateAsync(CredentialProviderType.AzureSql, name, secret);
+            var dbContext = scope.ServiceProvider.GetRequiredService<Archive.Infrastructure.Persistence.ArchiveDbContext>();
 
-            LoadCredentialProfiles();
-            SelectCredentialProfile(SourceCredentialProfileComboBox, createdId);
+            var patterns = dbContext.BackupJobExclusionPatterns
+                .AsNoTracking()
+                .Where(x => x.BackupJobId == jobId)
+                .Include(x => x.ExclusionPattern)
+                .Select(x => x.ExclusionPattern != null ? x.ExclusionPattern.Pattern : null)
+                .Where(x => x != null)
+                .Cast<string>()
+                .OrderBy(x => x)
+                .ToList();
 
-            NewSourceCredentialNameTextBox.Text = string.Empty;
-            NewSourceCredentialSecretPasswordBox.Password = string.Empty;
-            ValidationTextBlock.Text = string.Empty;
+            return string.Join(Environment.NewLine, patterns);
         }
-        catch (Exception ex)
+        catch
         {
-            ValidationTextBlock.Text = ex.Message;
-        }
-    }
-
-    private async void AddDestinationCredentialProfileButton_OnClick(object sender, RoutedEventArgs e)
-    {
-        if (AzureDestinationTypeComboBox.SelectedItem is not BackupDestinationType destinationType)
-        {
-            ValidationTextBlock.Text = "Select destination type before adding destination credentials.";
-            return;
-        }
-
-        var providerType = ToCredentialProviderType(destinationType);
-        if (providerType is null)
-        {
-            ValidationTextBlock.Text = "Local destination does not require credential profiles.";
-            return;
-        }
-
-        var name = NewDestinationCredentialNameTextBox.Text.Trim();
-        var secret = NewDestinationCredentialSecretPasswordBox.Password.Trim();
-
-        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(secret))
-        {
-            ValidationTextBlock.Text = "Provide destination profile name and secret to add a new destination profile.";
-            return;
-        }
-
-        try
-        {
-            using var scope = App.Services.CreateScope();
-            var profileService = scope.ServiceProvider.GetRequiredService<ICredentialProfileService>();
-            var createdId = await profileService.CreateAsync(providerType.Value, name, secret);
-
-            LoadDestinationCredentialProfiles();
-            SelectCredentialProfile(DestinationCredentialProfileComboBox, createdId);
-
-            NewDestinationCredentialNameTextBox.Text = string.Empty;
-            NewDestinationCredentialSecretPasswordBox.Password = string.Empty;
-            ValidationTextBlock.Text = string.Empty;
-        }
-        catch (Exception ex)
-        {
-            ValidationTextBlock.Text = ex.Message;
+            return string.Empty;
         }
     }
 
-    private void AzureDestinationTypeComboBox_OnSelectionChanged(object sender, RoutedEventArgs e)
+    private static void ApplyIgnoreRules(BackupJob job, IReadOnlyList<string> ignoreRules)
     {
-        if (_isLoadingProfiles)
+        foreach (var pattern in ignoreRules)
         {
-            return;
+            var exclusionPatternId = Guid.NewGuid();
+            job.BackupJobExclusionPatterns.Add(new BackupJobExclusionPattern
+            {
+                BackupJobId = job.Id,
+                ExclusionPatternId = exclusionPatternId,
+                ExclusionPattern = new ExclusionPattern
+                {
+                    Id = exclusionPatternId,
+                    Name = "Job Ignore Rule",
+                    Pattern = pattern,
+                    IsGlobal = false,
+                    IsSystemSuggestion = false
+                }
+            });
+        }
+    }
+
+    private static async Task SaveIgnoreRulesAsync(
+        Archive.Infrastructure.Persistence.ArchiveDbContext dbContext,
+        Guid jobId,
+        IReadOnlyList<string> ignoreRules)
+    {
+        var existingLinks = await dbContext.BackupJobExclusionPatterns
+            .Where(x => x.BackupJobId == jobId)
+            .ToListAsync();
+
+        dbContext.BackupJobExclusionPatterns.RemoveRange(existingLinks);
+
+        foreach (var pattern in ignoreRules)
+        {
+            var exclusionPattern = new ExclusionPattern
+            {
+                Id = Guid.NewGuid(),
+                Name = "Job Ignore Rule",
+                Pattern = pattern,
+                IsGlobal = false,
+                IsSystemSuggestion = false
+            };
+
+            dbContext.ExclusionPatterns.Add(exclusionPattern);
+            dbContext.BackupJobExclusionPatterns.Add(new BackupJobExclusionPattern
+            {
+                BackupJobId = jobId,
+                ExclusionPatternId = exclusionPattern.Id,
+                ExclusionPattern = exclusionPattern
+            });
         }
 
-        LoadDestinationCredentialProfiles();
-        RefreshAzureDestinationProfileUi();
-    }
-
-    private void JobTypeComboBox_OnSelectionChanged(object sender, RoutedEventArgs e)
-    {
-        RefreshJobTypeUi();
-    }
-
-    private void RefreshJobTypeUi()
-    {
-        var isAzureSql = JobTypeComboBox.SelectedItem is JobType.AzureSqlDatabaseBackup;
-
-        OptionsLabelTextBlock.Text = isAzureSql ? "Azure Settings" : "Sync Options";
-
-        SyncOptionsPanel.Visibility = isAzureSql ? Visibility.Collapsed : Visibility.Visible;
-        AzureSqlOptionsPanel.Visibility = isAzureSql ? Visibility.Visible : Visibility.Collapsed;
-
-        SourceLabelTextBlock.Text = isAzureSql ? "Azure SQL Server" : "Source";
-        DestinationLabelTextBlock.Text = isAzureSql ? "Database" : "Destination";
-
-        BrowseSourceFolderButton.Visibility = isAzureSql ? Visibility.Collapsed : Visibility.Visible;
-        BrowseDestinationFolderButton.Visibility = isAzureSql ? Visibility.Collapsed : Visibility.Visible;
-
-        SourcePathTextBox.ToolTip = isAzureSql
-            ? "Azure SQL Server name, e.g. myserver.database.windows.net"
-            : null;
-
-        DestinationPathTextBox.ToolTip = isAzureSql
-            ? "Azure SQL Database name"
-            : null;
-
-        PreviewOperationsButton.IsEnabled = !isAzureSql;
-        PreviewOperationsButton.ToolTip = isAzureSql
-            ? "Preview is available for directory sync jobs. For Azure SQL backup jobs, save and use Run Now from the Jobs list."
-            : null;
-
-        RefreshAzureDestinationProfileUi();
-    }
-
-    private void RefreshAzureDestinationProfileUi()
-    {
-        var destinationType = AzureDestinationTypeComboBox.SelectedItem as BackupDestinationType?;
-        var requiresCredentials = destinationType.HasValue && RequiresDestinationCredentials(destinationType.Value);
-
-        AzureDestinationTargetHintTextBlock.Text = destinationType switch
-        {
-            BackupDestinationType.LocalDevice => "LocalDevice format: existing folder path, e.g. D:\\ArchiveBackups\\Sql",
-            BackupDestinationType.AzureBlobStorage => "AzureBlobStorage format: container or container/prefix, e.g. archive-backups/sql",
-            BackupDestinationType.GoogleDrive => "GoogleDrive format: destination folder id in Drive",
-            _ => "Enter a target based on destination type."
-        };
-
-        AzureDestinationTargetTextBox.ToolTip = AzureDestinationTargetHintTextBlock.Text;
-
-        DestinationProfileLabelTextBlock.Visibility = requiresCredentials ? Visibility.Visible : Visibility.Collapsed;
-        DestinationCredentialProfileComboBox.Visibility = requiresCredentials ? Visibility.Visible : Visibility.Collapsed;
-        NewDestinationCredentialGrid.Visibility = requiresCredentials ? Visibility.Visible : Visibility.Collapsed;
-
-        NewDestinationCredentialSecretPasswordBox.ToolTip = destinationType switch
-        {
-            BackupDestinationType.AzureBlobStorage => "Azure Storage connection string",
-            BackupDestinationType.GoogleDrive => "Google service account JSON payload",
-            _ => "Connection string or service account JSON"
-        };
-    }
-
-    private static bool RequiresDestinationCredentials(BackupDestinationType destinationType)
-    {
-        return destinationType is BackupDestinationType.AzureBlobStorage or BackupDestinationType.GoogleDrive;
-    }
-
-    private static CredentialProviderType? ToCredentialProviderType(BackupDestinationType destinationType)
-    {
-        return destinationType switch
-        {
-            BackupDestinationType.AzureBlobStorage => CredentialProviderType.AzureBlobStorage,
-            BackupDestinationType.GoogleDrive => CredentialProviderType.GoogleDrive,
-            _ => null
-        };
+        await dbContext.SaveChangesAsync();
     }
 }
